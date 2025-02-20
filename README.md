@@ -26,6 +26,6 @@ Arch/Manjaro: (In Terminal) "sudo pamac install python-pygame"
 
 ***3. Install PyTMX***
 
-Windows: pip install pytmx
+Windows: (In Command Prompt) "pip install pytmx"
 
 MacOS/Linux: I completely forgot, but you can check out the official page -- https://pytmx.readthedocs.io/en/latest/

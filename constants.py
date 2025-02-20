@@ -14,7 +14,6 @@ pygame.mixer.init()
 pygame.font.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
-testbg = pygame.image.load(os.path.join("assets", "backgrounds", "HUB.png")).convert()
 platSprite = pygame.image.load(os.path.join("assets", "world building", "HUBGround.png")).convert()
 
 fallSound = pygame.mixer.Sound(os.path.join("assets", "sounds", "fall.mp3"))
