@@ -24,12 +24,11 @@ class Sonic(pygame.sprite.Sprite):
         self.image_index = 0
         self.image = self.idle_images[self.image_index]
         self.rect = self.image.get_rect(topleft=(self.x, self.y))
-        # Calculate the center of the rectangle
+
         center_x = self.rect.centerx
         center_y = self.rect.centery
-        # Create the hitbox centered on the rectangle
         self.hitbox = pygame.Rect(center_x - (self.rect.width // 4), center_y - (self.rect.height * 0.4), self.rect.width // 2, self.rect.height * 0.8)
-
+        self.target_angle = 0
         self.animation_speed = 0.1
         self.acceleration = 0.2
         self.max_acceleration = 0.3
@@ -49,17 +48,38 @@ class Sonic(pygame.sprite.Sprite):
         self.stopping = False
         self.stoppingSoundPlayed = False
         self.mask = pygame.mask.from_surface(self.image)
+        self.last_key_pressed = None
+        self.contact_mode = FLOOR
+
+        # Sensors for slope detection
+        self.sensor_front = pygame.Rect(self.hitbox.centerx + 10, self.hitbox.bottom, 5, 5)
+        self.sensor_back = pygame.Rect(self.hitbox.centerx - 10, self.hitbox.bottom, 5, 5)
+
+    def update_contact_mode(self):
+        """Update Sonic's contact mode based on the current angle."""
+        if 316 <= self.angle <= 360 or 0 <= self.angle <= 44:
+            self.contact_mode = FLOOR
+        elif 45 <= self.angle <= 135:
+            self.contact_mode = RIGHT_WALL
+        elif 136 <= self.angle <= 224:
+            self.contact_mode = CEILING
+        elif 225 <= self.angle <= 315:
+            self.contact_mode = LEFT_WALL
 
     def update(self):
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_SPACE] and not self.jumped:  # Check if Space key is pressed and Sonic hasn't jumped yet
+
+        # Jump logic (adjust for contact mode)
+        if keys[pygame.K_SPACE] and not self.jumped:
             self.Yvel = -15
             self.jumped = True
             self.grounded = False
             if not self.jumpSoundPlayed:
                 pygame.mixer.Sound.play(jumpSound)
                 self.jumpSoundPlayed = True
-            self.jumpSoundPlayed = False  # Update the flag to indicate that the jump sound has been played
+            self.jumpSoundPlayed = False  
+
+        # Movement logic remains the same
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             self.direction = 1
             if self.groundSpeed > 0:
@@ -69,7 +89,6 @@ class Sonic(pygame.sprite.Sprite):
                     self.groundSpeed = -0.5
                     self.stopping = False
             elif self.groundSpeed > -self.maxSpeed:
-                # Gradually increase acceleration up to maximum
                 if self.acceleration < self.max_acceleration:
                     self.acceleration += 0.001
                 if self.acceleration > self.max_acceleration:
@@ -77,6 +96,7 @@ class Sonic(pygame.sprite.Sprite):
                 self.groundSpeed -= self.acceleration
                 if self.groundSpeed <= -self.maxSpeed:
                     self.groundSpeed = -self.maxSpeed
+
         elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
             self.direction = -1
             if self.groundSpeed < 0:
@@ -86,7 +106,6 @@ class Sonic(pygame.sprite.Sprite):
                     self.groundSpeed = 0.5
                     self.stopping = False
             elif self.groundSpeed < self.maxSpeed:
-                # Gradually increase acceleration up to maximum
                 if self.acceleration < self.max_acceleration:
                     self.acceleration += 0.001
                 if self.acceleration > self.max_acceleration:
@@ -99,29 +118,42 @@ class Sonic(pygame.sprite.Sprite):
                 self.acceleration -= 0.001
             self.groundSpeed -= min(abs(self.groundSpeed), self.friction) * (self.groundSpeed / abs(self.groundSpeed) if self.groundSpeed != 0 else 0)
             self.stopping = False
-        if self.stopping and not self.jumped:
+        
+        if self.stopping:
             if not self.stoppingSoundPlayed:
-                stoppingSound.play()
+                pygame.mixer.Sound.play(stoppingSound)
                 self.stoppingSoundPlayed = True
-        if self.stoppingSoundPlayed == True and not self.stopping:
+        else:
             self.stoppingSoundPlayed = False
 
+        # Apply gravity if not on the ground
         if not self.grounded:
-            self.Yvel += self.gravityforce  # Apply gravity
-            self.Yvel = min(self.Yvel, 10)  # Cap max fall speed
+            self.Yvel += self.gravityforce # Increase gravity effect
+            self.Yvel = min(self.Yvel, 15)  # Increase fall speed cap
             self.Xvel = self.groundSpeed
-        else:
-            self.Yvel = self.groundSpeed * math.sin(self.angle * -1)
-            self.Xvel = self.groundSpeed * math.cos(self.angle)    
 
+        else:
+            # Adjust movement vector based on angle
+            speed_vector = pygame.math.Vector2(self.groundSpeed, 0)
+            speed_vector = speed_vector.rotate(-self.angle)
+            self.Xvel = speed_vector.x
+            self.Yvel = speed_vector.y
+
+        # Update Sonic's position
         self.x += self.Xvel
-        self.rect.x = self.x  # Update self.rect with the new x coordinate
+        self.rect.x = self.x
         self.y += self.Yvel
         self.rect.y = self.y
         self.hitbox.x = self.x
         self.hitbox.y = self.y
-        # Update animation speed and direction
+
+        # Update sensors' position
+        self.sensor_front.midbottom = (self.hitbox.centerx + 10, self.hitbox.bottom)
+        self.sensor_back.midbottom = (self.hitbox.centerx - 10, self.hitbox.bottom)
+
+        # Update animation
         self.update_animation()
+        self.update_contact_mode()
 
     def update_animation(self):
         # Calculate animation speed based on Sonic's ground speed

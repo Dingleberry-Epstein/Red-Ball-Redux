@@ -14,8 +14,6 @@ pygame.mixer.init()
 pygame.font.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
-platSprite = pygame.image.load(os.path.join("assets", "world building", "HUBGround.png")).convert()
-
 fallSound = pygame.mixer.Sound(os.path.join("assets", "sounds", "fall.mp3"))
 jumpSound = pygame.mixer.Sound(os.path.join("assets", "sounds", "Jumpsound.wav"))
 stoppingSound = pygame.mixer.Sound(os.path.join("assets", "sounds", "Brake.mp3"))
@@ -37,3 +35,8 @@ hover_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "HoverSound.mp
 original_homing_image = pygame.image.load(os.path.join("assets", "sprites", "Homing Attack", "homing1.png")).convert_alpha()
 homing_image = pygame.transform.scale(original_homing_image, (67.5, 67.5))
 homing_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "homingsound.mp3"))
+
+FLOOR = 0
+RIGHT_WALL = 1
+CEILING = 2
+LEFT_WALL = 3

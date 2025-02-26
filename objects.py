@@ -1,4 +1,4 @@
-import pygame, os, math, time
+import pygame, os, math, time, pytmx
 
 from constants import *
 from utils import Button
@@ -13,15 +13,22 @@ testbgH = 1080
 test_platform = pygame.Rect(platX, platY, platW, platH)
 testbg_rect = pygame.Rect(testbgX, testbgY, testbgW, testbgH)
 
-platform_img1 = pygame.image.load(os.path.join("assets", "world building", "HUBGround.png"))
+
+Windmill_Isle_TMX = pytmx.load_pygame(os.path.join("assets", "world building", "Tiled Worlds", "sonic test world.tmx"))
 
 class Tile(pygame.sprite.Sprite):
-    def __init__(self, image, position, angle=0):  # Default angle to 0 if not provided
+    def __init__(self, image, position, angle=0, collideable=True):
         super().__init__()
-        self.image = image.convert_alpha()  
+        self.image = image.convert_alpha()  # Ensure the image has alpha transparency
         self.rect = self.image.get_rect(topleft=position)
-        self.mask = pygame.mask.from_surface(self.image)  
-        self.angle = angle  # Store the angle
+        self.angle = angle  # Store the tile's angle
+        self.collideable = collideable  # Whether the tile is collideable
+
+        # Only create a mask if the tile is collideable
+        if self.collideable:
+            self.mask = pygame.mask.from_surface(self.image)
+        else:
+            self.mask = None  # No collision for non-collideable tiles
 
 class Ring(pygame.sprite.Sprite):
     def __init__(self, x, y):

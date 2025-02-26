@@ -1,5 +1,5 @@
 import pygame
-from levels import Eggman_Land
+from levels import Windmill_Isle
 from constants import SCREEN_WIDTH, SCREEN_HEIGHT, RingFont
 
 class Game:
@@ -8,7 +8,7 @@ class Game:
         pygame.init()
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.clock = pygame.time.Clock()
-        self.level = Eggman_Land()
+        self.level = Windmill_Isle()
         self.running = True
 
     def run(self):
