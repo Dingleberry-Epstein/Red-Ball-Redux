@@ -1,33 +1,62 @@
-import pygame, math, random
+import pygame
+import math
+import random
+import os
 from constants import *
-from objects import *
 
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-
-clock = pygame.time.Clock()
-pygame.mixer.init()
-
-class Sonic(pygame.sprite.Sprite):
-    def __init__(self, x, y):
+class Character(pygame.sprite.Sprite):
+    """Base class for all characters in the game"""
+    def __init__(self, x, y, width, height):
         super().__init__()
         self.x = int(x)
         self.y = int(y)
+        self.width = width
+        self.height = height
+        self.image = pygame.Surface((width, height), pygame.SRCALPHA)
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.hitbox = pygame.Rect(x, y, width, height)
+        self.Xvel = 0
+        self.Yvel = 0
+        self.grounded = False
+        self.mask = pygame.mask.from_surface(self.image)
+    
+    def move(self):
+        """Move the character based on velocity"""
+        # Update position based on velocity
+        self.x += self.Xvel
+        self.rect.x = self.x
+        self.y += self.Yvel
+        self.rect.y = self.y
+        self.hitbox.x = self.x
+        self.hitbox.y = self.y
+        
+    def handle_input(self):
+        """Handle user input for character movement"""
+        pass
+
+
+class Sonic(Character):
+    """Sonic character class"""
+    def __init__(self, x, y):
+        super().__init__(x, y, 40, 40)
+        
+        # Animation frames
         self.frame = 0
-        self.width = 40 
-        self.height = 40
+        self.image_index = 0
         self.run_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicRun{i}.png")).convert_alpha() for i in range(1, 9)]
         self.sprint_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicSprint{i}.png")).convert_alpha() for i in range(1, 9)]
         self.boosting_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicBoost{i}.png")).convert_alpha() for i in range(1, 9)]
         self.idle_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicIdle{i}.png")).convert_alpha() for i in range(1, 6)]
         self.jump_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicJump{i}.png")).convert_alpha() for i in range(1, 5)]
         self.stopping_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicStopping{i}.png")).convert_alpha() for i in range(1, 3)]
-        self.image_index = 0
         self.image = self.idle_images[self.image_index]
-        self.rect = self.image.get_rect(topleft=(self.x, self.y))
-
+        
+        # Hitbox refinement
         center_x = self.rect.centerx
         center_y = self.rect.centery
         self.hitbox = pygame.Rect(center_x - (self.rect.width // 4), center_y - (self.rect.height * 0.4), self.rect.width // 2, self.rect.height * 0.8)
+        
+        # Physics parameters
         self.target_angle = 0
         self.animation_speed = 0.1
         self.acceleration = 0.2
@@ -38,16 +67,15 @@ class Sonic(pygame.sprite.Sprite):
         self.groundSpeed = 0
         self.gravityforce = 0.5
         self.angle = 0
+        
+        # State flags
         self.jumped = False
         self.direction = 0
-        self.Xvel = 0
-        self.Yvel = 0
         self.jumpSoundPlayed = False
         self.gameover = False
         self.grounded = False
         self.stopping = False
         self.stoppingSoundPlayed = False
-        self.mask = pygame.mask.from_surface(self.image)
         self.last_key_pressed = None
         self.contact_mode = FLOOR
 
@@ -66,10 +94,11 @@ class Sonic(pygame.sprite.Sprite):
         elif 225 <= self.angle <= 315:
             self.contact_mode = LEFT_WALL
 
-    def update(self):
+    def handle_input(self):
+        """Handle user input for Sonic's movement"""
         keys = pygame.key.get_pressed()
 
-        # Jump logic (adjust for contact mode)
+        # Jump logic
         if keys[pygame.K_SPACE] and not self.jumped:
             self.Yvel = -15
             self.jumped = True
@@ -79,7 +108,7 @@ class Sonic(pygame.sprite.Sprite):
                 self.jumpSoundPlayed = True
             self.jumpSoundPlayed = False  
 
-        # Movement logic remains the same
+        # Movement logic
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             self.direction = 1
             if self.groundSpeed > 0:
@@ -126,12 +155,13 @@ class Sonic(pygame.sprite.Sprite):
         else:
             self.stoppingSoundPlayed = False
 
+    def detect_ground(self):
+        """Apply physics based on ground state"""
         # Apply gravity if not on the ground
         if not self.grounded:
-            self.Yvel += self.gravityforce # Increase gravity effect
+            self.Yvel += self.gravityforce  # Increase gravity effect
             self.Yvel = min(self.Yvel, 15)  # Increase fall speed cap
             self.Xvel = self.groundSpeed
-
         else:
             # Adjust movement vector based on angle
             speed_vector = pygame.math.Vector2(self.groundSpeed, 0)
@@ -139,23 +169,14 @@ class Sonic(pygame.sprite.Sprite):
             self.Xvel = speed_vector.x
             self.Yvel = speed_vector.y
 
-        # Update Sonic's position
-        self.x += self.Xvel
-        self.rect.x = self.x
-        self.y += self.Yvel
-        self.rect.y = self.y
-        self.hitbox.x = self.x
-        self.hitbox.y = self.y
-
+    def snap_to_ground(self):
+        """Update Sonic's sensors for ground detection"""
         # Update sensors' position
         self.sensor_front.midbottom = (self.hitbox.centerx + 10, self.hitbox.bottom)
         self.sensor_back.midbottom = (self.hitbox.centerx - 10, self.hitbox.bottom)
 
-        # Update animation
-        self.update_animation()
-        self.update_contact_mode()
-
     def update_animation(self):
+        """Update Sonic's animation based on his state"""
         # Calculate animation speed based on Sonic's ground speed
         self.animation_speed = min(0.1 + abs(self.groundSpeed) * 0.01, 0.5)
 
@@ -207,3 +228,13 @@ class Sonic(pygame.sprite.Sprite):
                 self.image = pygame.transform.flip(self.stopping_images[self.image_index], True, False)
         
         self.image = pygame.transform.rotate(self.image, self.angle)
+        self.mask = pygame.mask.from_surface(self.image)
+
+    def update(self):
+        """Main update method for Sonic"""
+        self.handle_input()
+        self.detect_ground()
+        self.move()
+        self.snap_to_ground()
+        self.update_animation()
+        self.update_contact_mode()

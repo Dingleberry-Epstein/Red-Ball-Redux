@@ -1,175 +1,194 @@
-import pygame, os, math
+import pygame
+import os
 from constants import *
-from random import randint
-from pytmx.util_pygame import *
 
 pygame.init()
-pygame.display.set_mode((1280, 720))
-
-clock = pygame.time.Clock()
-
-SCREEN_WIDTH = 1280
-SCREEN_HEIGHT = 720
-
-GRAY = (150, 150, 150)
-LIGHT_GRAY = (200, 200, 200)
-hover_sound = pygame.mixer.Sound(os.path.join("assets", "sounds" , "HoverSound.mp3"))
-select_sound = pygame.mixer.Sound(os.path.join("assets", "sounds" , "SelectSound.mp3"))
-
-def fade_in_out(image, duration):
-    alpha = 0
-    scaled_image = pygame.transform.scale(image, (int(image.get_width() * 0.33), int(image.get_height() * 0.33)))
-    image_rect = scaled_image.get_rect(center=screen.get_rect().center)
-
-    # Set the background color
-    background_color = (255, 255, 255)
-    screen.fill(background_color)
-    pygame.display.flip()
-    clock.tick(60)  # Adjust the frame rate as needed 
-
-    # Fade in
-    while alpha < 255:
-        alpha += 5  # Adjust the speed of the fade-in
-        scaled_image.set_alpha(alpha)
-        screen.fill(background_color)  # Clear the screen with the background color
-        screen.blit(scaled_image, image_rect)
-        pygame.display.flip()
-        clock.tick(60)  # Adjust the frame rate as needed
-
-    # Hold the image for the specified duration
-    pygame.time.wait(duration * 1000)  # Convert seconds to milliseconds
-
-    # Fade out
-    while alpha > 0:
-        alpha -= 5  # Adjust the speed of the fade-out
-        scaled_image.set_alpha(alpha)
-        screen.fill(background_color)  # Clear the screen with the background color
-        screen.blit(scaled_image, image_rect)
-        pygame.display.flip()
-        clock.tick(60)  # Adjust the frame rate as needed
-
-def scene_fade_in(screen, clock, image, duration, background_color=(255, 255, 255)):
-    """
-    Fade in a scene on the screen.
-
-    Args:
-    - screen: The Pygame screen surface.
-    - clock: Pygame clock object.
-    - image: The image to be faded in.
-    - duration: The duration of the fade-in effect in seconds.
-    - background_color: The background color of the screen. Default is white (255, 255, 255).
-    """
-    alpha = 0
-    image_rect = image.get_rect(center=screen.get_rect().center)
-
-    # Fill the screen with the background color
-    screen.fill(background_color)
-    pygame.display.flip()
-    clock.tick(60)  # Adjust the frame rate as needed
-
-    # Scale the image to fit the screen while preserving its aspect ratio
-    scaled_image = pygame.transform.smoothscale(image, (screen.get_width(), screen.get_height()))
-
-    # Calculate the alpha increment per frame
-    alpha_increment = 255 / (duration * 60)  # 60 FPS
-
-    # Fade in
-    while alpha < 255:
-        alpha += alpha_increment
-        scaled_image.set_alpha(int(alpha))
-        screen.fill(background_color)  # Clear the screen with the background color
-        screen.blit(scaled_image, (0, 0))
-        pygame.display.flip()
-        clock.tick(60)  # Adjust the frame rate as needed
-
-def scene_fade_out(screen, clock, image, duration, background_color=(1, 1, 1)):
-    """
-    Fade out a scene on the screen.
-
-    Args:
-    - screen: The Pygame screen surface.
-    - clock: Pygame clock object.
-    - image: The image to be faded out.
-    - duration: The duration of the fade-out effect in seconds.
-    - background_color: The background color of the screen during the fade-out. Default is (1, 1, 1).
-    """
-    start_time = pygame.time.get_ticks()  # Get the start time in milliseconds
-    scaled_image = pygame.transform.smoothscale(image, (screen.get_width(), screen.get_height()))
-
-    # Calculate the alpha increment per frame
-    alpha_increment = 255 / (duration * 60)  # 60 FPS
-
-    # Fade out
-    while pygame.time.get_ticks() - start_time < duration * 1000:  # Convert duration to milliseconds
-        alpha = int((pygame.time.get_ticks() - start_time) / (duration * 2.5))  # Adjust the speed of the fade-out
-        alpha = max(0, min(255, alpha))  # Ensure alpha stays within the valid range [0, 255]
-        scaled_image.set_alpha(255 - alpha)
-        screen.fill(background_color)  # Clear the screen with the background color
-        screen.blit(scaled_image, (0, 0))
-        pygame.display.flip()
-        clock.tick(60)  # Adjust the frame rate as needed
-
-class Button:
-    def __init__(self, x, y, width, height, text):
-        self.rect = pygame.Rect(x, y, width, height)
-        self.default_color = GRAY
-        self.hover_color = LIGHT_GRAY
-        self.clicked = False
-        self.hovered = False
-        self.text = text
-        self.hoverSoundPlayed = False
-        self.clickSoundPlayed = False
-
-    def draw(self, surface, font, text, text_color):
-        if self.hovered:
-            color = self.hover_color
-        else:
-            color = self.default_color
-        pygame.draw.rect(surface, color, self.rect)
-        text_surface = font.render(text, True, text_color)
-        text_rect = text_surface.get_rect(center=self.rect.center)
-        surface.blit(text_surface, text_rect)
-
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEMOTION:
-            pos = pygame.mouse.get_pos()
-            self.hovered = self.rect.collidepoint(pos)
-            if self.hovered and not self.hoverSoundPlayed:
-                hover_sound.play()
-                self.hoverSoundPlayed = True
-            elif not self.hovered:
-                self.hoverSoundPlayed = False
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            pos = pygame.mouse.get_pos()
-            is_clicked = self.rect.collidepoint(pos)
-            if is_clicked and not self.clickSoundPlayed:
-                select_sound.play()
-                self.clickSoundPlayed = True
-            elif not is_clicked:
-                self.clickSoundPlayed = False
-            self.clicked = is_clicked
-        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            self.clicked = False
-        else:
-            self.hovered = False
 
 class Camera:
+    """Camera class that follows a target entity and handles viewport calculations"""
     def __init__(self, width, height):
-        self.camera = pygame.Rect(0, 0, width, height)  # Viewport
+        """Initialize the camera with level dimensions
+        
+        Args:
+            width (int): The width of the level
+            height (int): The height of the level
+        """
+        self.viewport = pygame.Rect(0, 0, width, height)
         self.width = width
         self.height = height
 
     def apply(self, entity):
-        """Offset an entity’s position relative to the camera"""
-        return entity.rect.move(self.camera.topleft)
+        """Offset an entity's position relative to the camera
+        
+        Args:
+            entity (GameObject): The entity to apply camera offset to
+            
+        Returns:
+            pygame.Rect: Offset rect for rendering
+        """
+        return entity.rect.move(self.viewport.topleft)
 
     def update(self, target):
-        """Move the camera to follow Sonic"""
-        x = -target.rect.centerx + SCREEN_WIDTH // 2  # Keep Sonic in the center
+        """Move the camera to follow a target entity
+        
+        Args:
+            target (GameObject): The entity to follow (usually Sonic)
+        """
+        # Center the target in the screen
+        x = -target.rect.centerx + SCREEN_WIDTH // 2
         y = -target.rect.centery + SCREEN_HEIGHT // 2
 
         # Clamp camera to level boundaries
         x = max(-(self.width - SCREEN_WIDTH), min(0, x))
         y = max(-(self.height - SCREEN_HEIGHT), min(0, y))
 
-        self.camera = pygame.Rect(x, y, self.width, self.height)
+        self.viewport = pygame.Rect(x, y, self.width, self.height)
+
+
+class Button:
+    """Interactive button class for UI elements"""
+    def __init__(self, x, y, width, height, text):
+        """Initialize a button with position and text
+        
+        Args:
+            x (int): X position
+            y (int): Y position
+            width (int): Button width
+            height (int): Button height
+            text (str): Button text
+        """
+        self.rect = pygame.Rect(x, y, width, height)
+        self.default_color = GRAY
+        self.hover_color = LIGHT_GRAY
+        self.clicked = False
+        self.hovered = False
+        self.text = text
+        self.hover_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "HoverSound.mp3"))
+        self.select_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "SelectSound.mp3"))
+        self.hover_sound_played = False
+        self.click_sound_played = False
+
+    def draw(self, surface, font, text_color=(0, 0, 0)):
+        """Draw the button on a surface
+        
+        Args:
+            surface (pygame.Surface): Surface to draw on
+            font (pygame.font.Font): Font for text rendering
+            text_color (tuple): RGB color for text
+        """
+        # Use hover color if hovered, otherwise default color
+        color = self.hover_color if self.hovered else self.default_color
+        
+        # Draw button rectangle
+        pygame.draw.rect(surface, color, self.rect)
+        
+        # Render and center text
+        text_surface = font.render(self.text, True, text_color)
+        text_rect = text_surface.get_rect(center=self.rect.center)
+        surface.blit(text_surface, text_rect)
+
+    def handle_event(self, event):
+        """Handle mouse events for the button
+        
+        Args:
+            event (pygame.event.Event): Pygame event to process
+            
+        Returns:
+            bool: True if button was clicked, False otherwise
+        """
+        if event.type == pygame.MOUSEMOTION:
+            # Check for hover state
+            pos = pygame.mouse.get_pos()
+            self.hovered = self.rect.collidepoint(pos)
+            
+            # Play hover sound once when first hovering
+            if self.hovered and not self.hover_sound_played:
+                self.hover_sound.play()
+                self.hover_sound_played = True
+            elif not self.hovered:
+                self.hover_sound_played = False
+                
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # Check for click state
+            pos = pygame.mouse.get_pos()
+            is_clicked = self.rect.collidepoint(pos)
+            
+            # Play select sound once when clicked
+            if is_clicked and not self.click_sound_played:
+                self.select_sound.play()
+                self.click_sound_played = True
+                self.clicked = True
+            elif not is_clicked:
+                self.click_sound_played = False
+                
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            was_clicked = self.clicked
+            self.clicked = False
+            return was_clicked and self.rect.collidepoint(pygame.mouse.get_pos())
+            
+        return False
+
+
+class SceneManager:
+    """Handles scene transitions and effects"""
+    @staticmethod
+    def fade_in(screen, image, duration, background_color=(255, 255, 255)):
+        """Fade in a scene on the screen
+        
+        Args:
+            screen (pygame.Surface): The screen surface
+            image (pygame.Surface): Image to fade in
+            duration (float): Duration in seconds
+            background_color (tuple): RGB background color
+        """
+        clock = pygame.time.Clock()
+        alpha = 0
+        
+        # Scale image to fit screen
+        scaled_image = pygame.transform.smoothscale(image, (screen.get_width(), screen.get_height()))
+        
+        # Calculate alpha increment per frame (60 FPS)
+        alpha_increment = 255 / (duration * 60)
+        
+        # Fill background
+        screen.fill(background_color)
+        pygame.display.flip()
+        
+        # Fade in loop
+        while alpha < 255:
+            alpha += alpha_increment
+            scaled_image.set_alpha(int(alpha))
+            screen.fill(background_color)
+            screen.blit(scaled_image, (0, 0))
+            pygame.display.flip()
+            clock.tick(60)
+
+    @staticmethod
+    def fade_out(screen, image, duration, background_color=(1, 1, 1)):
+        """Fade out a scene from the screen
+        
+        Args:
+            screen (pygame.Surface): The screen surface
+            image (pygame.Surface): Image to fade out
+            duration (float): Duration in seconds
+            background_color (tuple): RGB background color
+        """
+        clock = pygame.time.Clock()
+        start_time = pygame.time.get_ticks()
+        
+        # Scale image to fit screen
+        scaled_image = pygame.transform.smoothscale(image, (screen.get_width(), screen.get_height()))
+        
+        # Fade out loop
+        while pygame.time.get_ticks() - start_time < duration * 1000:
+            # Calculate alpha based on elapsed time
+            elapsed = pygame.time.get_ticks() - start_time
+            alpha = int(elapsed / (duration * 2.5))
+            alpha = max(0, min(255, alpha))
+            
+            # Apply alpha and draw
+            scaled_image.set_alpha(255 - alpha)
+            screen.fill(background_color)
+            screen.blit(scaled_image, (0, 0))
+            pygame.display.flip()
+            clock.tick(60)
