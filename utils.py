@@ -5,10 +5,10 @@ from constants import *
 pygame.init()
 
 class Camera:
-    """Camera class that follows a target entity and handles viewport calculations"""
+    # Camera class that follows a target entity and handles viewport calculations
     def __init__(self, width, height):
-        """Initialize the camera with level dimensions
-        
+        # Initialize the camera with level dimensions
+        """
         Args:
             width (int): The width of the level
             height (int): The height of the level
@@ -16,10 +16,11 @@ class Camera:
         self.viewport = pygame.Rect(0, 0, width, height)
         self.width = width
         self.height = height
+        self.locked = False  # Add a lock state for the camera
 
     def apply(self, entity):
-        """Offset an entity's position relative to the camera
-        
+        # Offset an entity's position relative to the camera
+        """
         Args:
             entity (GameObject): The entity to apply camera offset to
             
@@ -29,11 +30,15 @@ class Camera:
         return entity.rect.move(self.viewport.topleft)
 
     def update(self, target):
-        """Move the camera to follow a target entity
-        
+        # Move the camera to follow a target entity
+        """
         Args:
             target (GameObject): The entity to follow (usually Sonic)
         """
+        # If camera is locked (during death sequence), don't update position
+        if self.locked:
+            return
+            
         # Center the target in the screen
         x = -target.rect.centerx + SCREEN_WIDTH // 2
         y = -target.rect.centery + SCREEN_HEIGHT // 2
@@ -44,12 +49,11 @@ class Camera:
 
         self.viewport = pygame.Rect(x, y, self.width, self.height)
 
-
 class Button:
-    """Interactive button class for UI elements"""
+    # Interactive button class for UI elements
     def __init__(self, x, y, width, height, text):
-        """Initialize a button with position and text
-        
+        # Initialize a button with position and text
+        """
         Args:
             x (int): X position
             y (int): Y position
@@ -69,8 +73,8 @@ class Button:
         self.click_sound_played = False
 
     def draw(self, surface, font, text_color=(0, 0, 0)):
-        """Draw the button on a surface
-        
+        # Draw the button on a surface
+        """
         Args:
             surface (pygame.Surface): Surface to draw on
             font (pygame.font.Font): Font for text rendering
@@ -88,8 +92,8 @@ class Button:
         surface.blit(text_surface, text_rect)
 
     def handle_event(self, event):
-        """Handle mouse events for the button
-        
+        # Handle mouse events for the button
+        """
         Args:
             event (pygame.event.Event): Pygame event to process
             
@@ -130,11 +134,11 @@ class Button:
 
 
 class SceneManager:
-    """Handles scene transitions and effects"""
+    # Handles scene transitions and effects
     @staticmethod
     def fade_in(screen, image, duration, background_color=(255, 255, 255)):
-        """Fade in a scene on the screen
-        
+        # Fade in a scene on the screen
+        """
         Args:
             screen (pygame.Surface): The screen surface
             image (pygame.Surface): Image to fade in
@@ -165,8 +169,8 @@ class SceneManager:
 
     @staticmethod
     def fade_out(screen, image, duration, background_color=(1, 1, 1)):
-        """Fade out a scene from the screen
-        
+        # Fade out a scene from the screen
+        """
         Args:
             screen (pygame.Surface): The screen surface
             image (pygame.Surface): Image to fade out

@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <tileset version="1.10" tiledversion="1.10.2" name="Angel_Island_Act_2_SonicAdv_Tile_Sheet" tilewidth="16" tileheight="16" tilecount="9360" columns="120">
  <image source="../Angel_Island_Act_2_SonicAdv_Tile_Sheet.png" trans="008000" width="1920" height="1248"/>
+ <tile id="1">
+  <properties>
+   <property name="ring" type="bool" value="true"/>
+  </properties>
+ </tile>
  <tile id="66">
   <properties>
    <property name="angle" type="float" value="0"/>
@@ -1250,6 +1255,51 @@
   <properties>
    <property name="angle" type="float" value="270"/>
    <property name="loop left wall" type="bool" value="true"/>
+  </properties>
+ </tile>
+ <tile id="8022">
+  <properties>
+   <property name="angle" type="float" value="337.5"/>
+  </properties>
+ </tile>
+ <tile id="8023">
+  <properties>
+   <property name="angle" type="float" value="337.5"/>
+  </properties>
+ </tile>
+ <tile id="8143">
+  <properties>
+   <property name="angle" type="float" value="337.5"/>
+  </properties>
+ </tile>
+ <tile id="8144">
+  <properties>
+   <property name="angle" type="float" value="337.5"/>
+  </properties>
+ </tile>
+ <tile id="8145">
+  <properties>
+   <property name="angle" type="float" value="337.5"/>
+  </properties>
+ </tile>
+ <tile id="8265">
+  <properties>
+   <property name="angle" type="float" value="337.5"/>
+  </properties>
+ </tile>
+ <tile id="8266">
+  <properties>
+   <property name="angle" type="float" value="337.5"/>
+  </properties>
+ </tile>
+ <tile id="8267">
+  <properties>
+   <property name="angle" type="float" value="337.5"/>
+  </properties>
+ </tile>
+ <tile id="8387">
+  <properties>
+   <property name="angle" type="float" value="337.5"/>
   </properties>
  </tile>
 </tileset>

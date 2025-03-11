@@ -1,62 +1,52 @@
-import pygame
-import math
-import random
-import os
+# characters.py - Character classes with proper inheritance
+import pygame, math, random
 from constants import *
+from objects import *
+
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+clock = pygame.time.Clock()
+pygame.mixer.init()
 
 class Character(pygame.sprite.Sprite):
-    """Base class for all characters in the game"""
-    def __init__(self, x, y, width, height):
+    """Base class for all game characters"""
+    def __init__(self, x, y):
         super().__init__()
         self.x = int(x)
         self.y = int(y)
-        self.width = width
-        self.height = height
-        self.image = pygame.Surface((width, height), pygame.SRCALPHA)
-        self.rect = self.image.get_rect(topleft=(x, y))
-        self.hitbox = pygame.Rect(x, y, width, height)
+        self.width = 0
+        self.height = 0
+        self.image = None
+        self.rect = None
+        self.mask = None
         self.Xvel = 0
         self.Yvel = 0
-        self.grounded = False
-        self.mask = pygame.mask.from_surface(self.image)
-    
-    def move(self):
-        """Move the character based on velocity"""
-        # Update position based on velocity
-        self.x += self.Xvel
-        self.rect.x = self.x
-        self.y += self.Yvel
-        self.rect.y = self.y
-        self.hitbox.x = self.x
-        self.hitbox.y = self.y
         
-    def handle_input(self):
-        """Handle user input for character movement"""
+    def update(self):
+        """Update character state"""
         pass
 
-
 class Sonic(Character):
-    """Sonic character class"""
     def __init__(self, x, y):
-        super().__init__(x, y, 40, 40)
-        
-        # Animation frames
+        super().__init__(x, y)
+        self.x = int(x)
+        self.y = int(y)
         self.frame = 0
-        self.image_index = 0
+        self.width = 40 
+        self.height = 40
         self.run_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicRun{i}.png")).convert_alpha() for i in range(1, 9)]
         self.sprint_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicSprint{i}.png")).convert_alpha() for i in range(1, 9)]
         self.boosting_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicBoost{i}.png")).convert_alpha() for i in range(1, 9)]
         self.idle_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicIdle{i}.png")).convert_alpha() for i in range(1, 6)]
         self.jump_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicJump{i}.png")).convert_alpha() for i in range(1, 5)]
         self.stopping_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicStopping{i}.png")).convert_alpha() for i in range(1, 3)]
+        self.image_index = 0
         self.image = self.idle_images[self.image_index]
-        
-        # Hitbox refinement
+        self.rect = self.image.get_rect(topleft=(self.x, self.y))
+
         center_x = self.rect.centerx
         center_y = self.rect.centery
         self.hitbox = pygame.Rect(center_x - (self.rect.width // 4), center_y - (self.rect.height * 0.4), self.rect.width // 2, self.rect.height * 0.8)
-        
-        # Physics parameters
         self.target_angle = 0
         self.animation_speed = 0.1
         self.acceleration = 0.2
@@ -67,17 +57,19 @@ class Sonic(Character):
         self.groundSpeed = 0
         self.gravityforce = 0.5
         self.angle = 0
-        
-        # State flags
         self.jumped = False
         self.direction = 0
+        self.Xvel = 0
+        self.Yvel = 0
         self.jumpSoundPlayed = False
         self.gameover = False
         self.grounded = False
         self.stopping = False
         self.stoppingSoundPlayed = False
+        self.mask = pygame.mask.from_surface(self.image)
         self.last_key_pressed = None
         self.contact_mode = FLOOR
+        self.boosting = False
 
         # Sensors for slope detection
         self.sensor_front = pygame.Rect(self.hitbox.centerx + 10, self.hitbox.bottom, 5, 5)
@@ -94,11 +86,29 @@ class Sonic(Character):
         elif 225 <= self.angle <= 315:
             self.contact_mode = LEFT_WALL
 
-    def handle_input(self):
-        """Handle user input for Sonic's movement"""
+    def update(self):
         keys = pygame.key.get_pressed()
+        
+        # Set maximum speed based on boost state
+        boost_max_speed = 32  # Boosted maximum speed
+        normal_max_speed = self.maxSpeed  # Your regular max speed (20)
+        
+        # Boosting logic - instantly set to boost speed when key is pressed
+        if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
+            self.current_max_speed = boost_max_speed
+            if not self.boosting:
+                # Only set this when first starting the boost
+                if abs(self.groundSpeed) < boost_max_speed:
+                    # Preserve direction but set to max boost speed
+                    direction = 1 if self.groundSpeed >= 0 else -1
+                    self.groundSpeed = boost_max_speed * direction
+                self.boosting = True
+        else:
+            # When not boosting, gradually return to normal max speed
+            self.current_max_speed = normal_max_speed
+            self.boosting = False
 
-        # Jump logic
+        # Jump logic (adjust for contact mode)
         if keys[pygame.K_SPACE] and not self.jumped:
             self.Yvel = -15
             self.jumped = True
@@ -108,7 +118,7 @@ class Sonic(Character):
                 self.jumpSoundPlayed = True
             self.jumpSoundPlayed = False  
 
-        # Movement logic
+        # Movement logic remains the same but uses current_max_speed instead of fixed maxSpeed
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             self.direction = 1
             if self.groundSpeed > 0:
@@ -117,14 +127,14 @@ class Sonic(Character):
                 if self.groundSpeed <= 0:
                     self.groundSpeed = -0.5
                     self.stopping = False
-            elif self.groundSpeed > -self.maxSpeed:
+            elif self.groundSpeed > -self.current_max_speed:
                 if self.acceleration < self.max_acceleration:
                     self.acceleration += 0.001
                 if self.acceleration > self.max_acceleration:
                     self.acceleration = self.max_acceleration
                 self.groundSpeed -= self.acceleration
-                if self.groundSpeed <= -self.maxSpeed:
-                    self.groundSpeed = -self.maxSpeed
+                if self.groundSpeed <= -self.current_max_speed:
+                    self.groundSpeed = -self.current_max_speed
 
         elif keys[pygame.K_RIGHT] or keys[pygame.K_d]:
             self.direction = -1
@@ -134,20 +144,20 @@ class Sonic(Character):
                 if self.groundSpeed >= 0:
                     self.groundSpeed = 0.5
                     self.stopping = False
-            elif self.groundSpeed < self.maxSpeed:
+            elif self.groundSpeed < self.current_max_speed:
                 if self.acceleration < self.max_acceleration:
                     self.acceleration += 0.001
                 if self.acceleration > self.max_acceleration:
                     self.acceleration = self.max_acceleration
                 self.groundSpeed += self.acceleration
-                if self.groundSpeed >= self.maxSpeed:
-                    self.groundSpeed = self.maxSpeed
+                if self.groundSpeed >= self.current_max_speed:
+                    self.groundSpeed = self.current_max_speed
         else:
             if self.acceleration > 0.05:
                 self.acceleration -= 0.001
             self.groundSpeed -= min(abs(self.groundSpeed), self.friction) * (self.groundSpeed / abs(self.groundSpeed) if self.groundSpeed != 0 else 0)
             self.stopping = False
-        
+            
         if self.stopping:
             if not self.stoppingSoundPlayed:
                 pygame.mixer.Sound.play(stoppingSound)
@@ -155,13 +165,12 @@ class Sonic(Character):
         else:
             self.stoppingSoundPlayed = False
 
-    def detect_ground(self):
-        """Apply physics based on ground state"""
         # Apply gravity if not on the ground
         if not self.grounded:
-            self.Yvel += self.gravityforce  # Increase gravity effect
+            self.Yvel += self.gravityforce # Increase gravity effect
             self.Yvel = min(self.Yvel, 15)  # Increase fall speed cap
             self.Xvel = self.groundSpeed
+
         else:
             # Adjust movement vector based on angle
             speed_vector = pygame.math.Vector2(self.groundSpeed, 0)
@@ -169,14 +178,23 @@ class Sonic(Character):
             self.Xvel = speed_vector.x
             self.Yvel = speed_vector.y
 
-    def snap_to_ground(self):
-        """Update Sonic's sensors for ground detection"""
+        # Update Sonic's position
+        self.x += self.Xvel
+        self.rect.x = self.x
+        self.y += self.Yvel
+        self.rect.y = self.y
+        self.hitbox.x = self.x
+        self.hitbox.y = self.y
+
         # Update sensors' position
         self.sensor_front.midbottom = (self.hitbox.centerx + 10, self.hitbox.bottom)
         self.sensor_back.midbottom = (self.hitbox.centerx - 10, self.hitbox.bottom)
 
+        # Update animation
+        self.update_animation()
+        self.update_contact_mode()
+
     def update_animation(self):
-        """Update Sonic's animation based on his state"""
         # Calculate animation speed based on Sonic's ground speed
         self.animation_speed = min(0.1 + abs(self.groundSpeed) * 0.01, 0.5)
 
@@ -228,13 +246,3 @@ class Sonic(Character):
                 self.image = pygame.transform.flip(self.stopping_images[self.image_index], True, False)
         
         self.image = pygame.transform.rotate(self.image, self.angle)
-        self.mask = pygame.mask.from_surface(self.image)
-
-    def update(self):
-        """Main update method for Sonic"""
-        self.handle_input()
-        self.detect_ground()
-        self.move()
-        self.snap_to_ground()
-        self.update_animation()
-        self.update_contact_mode()
