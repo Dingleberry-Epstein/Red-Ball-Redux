@@ -4,6 +4,16 @@ from constants import *
 
 pygame.init()
 
+
+pygame.joystick.init()
+
+# Check if a joystick is connected
+if pygame.joystick.get_count() > 0:
+    joystick = pygame.joystick.Joystick(0)
+    joystick.init()
+else:
+    joystick = None  # No controller connected
+
 class Camera:
     # Camera class that follows a target entity and handles viewport calculations
     def __init__(self, width, height):

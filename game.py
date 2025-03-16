@@ -10,6 +10,7 @@ class Game:
         self.clock = pygame.time.Clock()
         self.level = Windmill_Isle()
         self.running = True
+        pygame.display.set_caption("Sonic In Pygame: The Quest to Make a Sonic Game with Python")
 
     def run(self):
         """Main game loop"""

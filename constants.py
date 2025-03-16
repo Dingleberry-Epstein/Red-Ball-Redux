@@ -32,8 +32,7 @@ TryAgain_rect.center = (SCREEN_WIDTH // 2, (SCREEN_HEIGHT // 2) - 20)
 select_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "SelectSound.mp3"))
 hover_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "HoverSound.mp3"))
 
-original_homing_image = pygame.image.load(os.path.join("assets", "sprites", "Homing Attack", "homing1.png")).convert_alpha()
-homing_image = pygame.transform.scale(original_homing_image, (67.5, 67.5))
+homing_image = pygame.image.load(os.path.join("assets", "sprites", "Homing Attack", "homing1.png")).convert_alpha()
 homing_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "homingsound.mp3"))
 
 FLOOR = 0

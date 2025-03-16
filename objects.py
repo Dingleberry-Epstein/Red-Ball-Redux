@@ -62,28 +62,69 @@ class AnimatedGameObject(GameObject):
         self.current_frame = int(self.frame) % len(self.images)
         self.image = self.images[self.current_frame]
 
-class Ring(AnimatedGameObject):
-    """Ring collectible class - Optimized version"""
+class Ring(pygame.sprite.Sprite):  # Use pygame.sprite.Sprite for optimized rendering
+    """Ring collectible class - Optimized for large numbers of rings"""
+
+    # Class-level shared resources (load once)
+    _images_loaded = False
+    images = []
+    collect_sound = None
+
+    @classmethod
+    def load_resources(cls):
+        """Load images and sounds once for all instances."""
+        if not cls._images_loaded:
+            cls.images = [pygame.image.load(os.path.join("assets", "sprites", "ring", f"ring{i}.png")).convert_alpha() for i in range(1, 9)]
+            cls.images = [pygame.transform.scale(image, (50, 50)) for image in cls.images]
+            cls.collect_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "collectring.mp3"))
+            cls._images_loaded = True
+
     def __init__(self, x, y):
-        super().__init__(x, y)
-        # Class-level shared resources (move these to be static class variables)
-        if not hasattr(Ring, 'images_loaded'):
-            Ring.images_loaded = [pygame.image.load(os.path.join("assets", "sprites", "ring", f"ring{i}.png")).convert_alpha() for i in range(1, 9)]
-            Ring.images = [pygame.transform.scale(image, (50, 50)) for image in Ring.images_loaded]
-            Ring.collect_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "collectring.mp3"))
-        
-        self.rect = Ring.images[0].get_rect()
-        self.rect.topleft = (x, y)
-        self.collectSound = Ring.collect_sound
-        self.image = Ring.images[0]
-        self.animation_speed = 0.2  # Slow down animation to improve performance
+        super().__init__()
+        self.load_resources()  # Ensure resources are loaded once
+
+        self.image = self.images[0]
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.frame = 0  # Initialize frame counter
+        self.animation_speed = 0.2  # Adjust speed if needed
+        self.sound_played = False
+        self.sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "collectring.mp3"))
 
     def update(self):
-        """Update ring animation - optimized"""
-        # Update animation frame based on animation speed
+        """Update ring animation"""
         self.frame += self.animation_speed
-        self.frame %= len(Ring.images)
-        self.image = Ring.images[int(self.frame)]
+        self.frame %= len(self.images)
+        self.image = self.images[int(self.frame)]  # Update image
+
+class Spring(pygame.sprite.Sprite):
+    """Spring object that launches Sonic when touched."""
+    def __init__(self, x, y, angle):
+        super().__init__()
+        self.x = x
+        self.y = y
+        self.angle = angle  # Determines launch direction
+
+        # **Load & Scale the Spring Image**
+        original_image = pygame.image.load(os.path.join("assets", "sprites", "spring", "spring.png")).convert_alpha()
+        scaled_width = original_image.get_width() * 3
+        scaled_height = original_image.get_height() * 3
+        self.original_image = pygame.transform.scale(original_image, (scaled_width, scaled_height))
+
+        # **Rotate the Spring to Match the Angle**
+        self.image = pygame.transform.rotate(self.original_image, angle)
+        self.rect = self.image.get_rect(center=(x, y))
+        self.mask = pygame.mask.from_surface(self.image)
+
+        # **Spring Force (Adjust as Needed)**
+        self.force = 40
+        self.sound_channel = pygame.mixer.find_channel()  # Find an available sound channel
+        self.sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "spring.mp3"))
+        self.sound.set_volume(0.5)
+        self.sound_played = False
+
+    def update(self):
+        """Update function (if needed later)."""
+        pass
         
 class Enemy(AnimatedGameObject):
     """Enemy class with different types and behaviors"""
