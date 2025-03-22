@@ -279,66 +279,18 @@
  <tile id="183"/>
  <tile id="184"/>
  <tile id="185"/>
- <tile id="186">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="187">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="188">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="189">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="190">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="191">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="192">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="193">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="194">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="195">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="196">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="197">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
+ <tile id="186"/>
+ <tile id="187"/>
+ <tile id="188"/>
+ <tile id="189"/>
+ <tile id="190"/>
+ <tile id="191"/>
+ <tile id="192"/>
+ <tile id="193"/>
+ <tile id="194"/>
+ <tile id="195"/>
+ <tile id="196"/>
+ <tile id="197"/>
  <tile id="198"/>
  <tile id="199"/>
  <tile id="200"/>
@@ -447,66 +399,42 @@
  <tile id="303"/>
  <tile id="304"/>
  <tile id="305"/>
- <tile id="306">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="307">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="308">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
+ <tile id="306"/>
+ <tile id="307"/>
+ <tile id="308"/>
  <tile id="309">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="207"/>
   </properties>
  </tile>
  <tile id="310">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="205"/>
   </properties>
  </tile>
  <tile id="311">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="180"/>
   </properties>
  </tile>
  <tile id="312">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="172"/>
   </properties>
  </tile>
  <tile id="313">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="158"/>
   </properties>
  </tile>
  <tile id="314">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="148"/>
   </properties>
  </tile>
- <tile id="315">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="316">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="317">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
+ <tile id="315"/>
+ <tile id="316"/>
+ <tile id="317"/>
  <tile id="318"/>
  <tile id="319"/>
  <tile id="320"/>
@@ -615,24 +543,16 @@
  <tile id="423"/>
  <tile id="424"/>
  <tile id="425"/>
- <tile id="426">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="427">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
+ <tile id="426"/>
+ <tile id="427"/>
  <tile id="428">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="211"/>
   </properties>
  </tile>
  <tile id="429">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="210"/>
   </properties>
  </tile>
  <tile id="430">
@@ -657,24 +577,16 @@
  </tile>
  <tile id="434">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="135"/>
   </properties>
  </tile>
  <tile id="435">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="126"/>
   </properties>
  </tile>
- <tile id="436">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
- <tile id="437">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
+ <tile id="436"/>
+ <tile id="437"/>
  <tile id="438"/>
  <tile id="439"/>
  <tile id="440"/>
@@ -783,19 +695,15 @@
  <tile id="543"/>
  <tile id="544"/>
  <tile id="545"/>
- <tile id="546">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
+ <tile id="546"/>
  <tile id="547">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="256"/>
   </properties>
  </tile>
  <tile id="548">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="222"/>
   </properties>
  </tile>
  <tile id="549">
@@ -830,19 +738,15 @@
  </tile>
  <tile id="555">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="135"/>
   </properties>
  </tile>
  <tile id="556">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="126"/>
   </properties>
  </tile>
- <tile id="557">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
+ <tile id="557"/>
  <tile id="558"/>
  <tile id="559"/>
  <tile id="560"/>
@@ -951,14 +855,10 @@
  <tile id="663"/>
  <tile id="664"/>
  <tile id="665"/>
- <tile id="666">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
+ <tile id="666"/>
  <tile id="667">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="265"/>
   </properties>
  </tile>
  <tile id="668">
@@ -1003,14 +903,10 @@
  </tile>
  <tile id="676">
   <properties>
-   <property name="angle" type="float" value="0"/>
+   <property name="angle" type="float" value="113"/>
   </properties>
  </tile>
- <tile id="677">
-  <properties>
-   <property name="angle" type="float" value="0"/>
-  </properties>
- </tile>
+ <tile id="677"/>
  <tile id="678"/>
  <tile id="679"/>
  <tile id="680"/>
@@ -1255,7 +1151,7 @@
  </tile>
  <tile id="880">
   <properties>
-   <property name="angle" type="float" value="90"/>
+   <property name="angle" type="float" value="79"/>
   </properties>
  </tile>
  <tile id="881">
@@ -1399,7 +1295,7 @@
  </tile>
  <tile id="1000">
   <properties>
-   <property name="angle" type="float" value="80"/>
+   <property name="angle" type="float" value="72"/>
   </properties>
  </tile>
  <tile id="1001">
@@ -1543,7 +1439,7 @@
  </tile>
  <tile id="1120">
   <properties>
-   <property name="angle" type="float" value="70"/>
+   <property name="angle" type="float" value="63"/>
   </properties>
  </tile>
  <tile id="1121">
@@ -1682,7 +1578,7 @@
  </tile>
  <tile id="1239">
   <properties>
-   <property name="angle" type="float" value="50"/>
+   <property name="angle" type="float" value="42"/>
   </properties>
  </tile>
  <tile id="1240">
@@ -1811,17 +1707,17 @@
  <tile id="1355"/>
  <tile id="1356">
   <properties>
-   <property name="angle" type="float" value="10"/>
+   <property name="angle" type="float" value="11"/>
   </properties>
  </tile>
  <tile id="1357">
   <properties>
-   <property name="angle" type="float" value="20"/>
+   <property name="angle" type="float" value="22"/>
   </properties>
  </tile>
  <tile id="1358">
   <properties>
-   <property name="angle" type="float" value="30"/>
+   <property name="angle" type="float" value="27"/>
   </properties>
  </tile>
  <tile id="1359">
@@ -4951,7 +4847,7 @@
  <tile id="4219"/>
  <tile id="4220">
   <properties>
-   <property name="angle" type="float" value="5"/>
+   <property name="angle" type="float" value="8"/>
   </properties>
  </tile>
  <tile id="4221">
@@ -8151,13 +8047,12 @@
  <tile id="7199"/>
  <tile id="7200">
   <properties>
-   <property name="loop left wall" type="bool" value="true"/>
+   <property name="angle" type="float" value="270"/>
   </properties>
  </tile>
  <tile id="7201">
   <properties>
    <property name="angle" type="float" value="270"/>
-   <property name="loop left wall" type="bool" value="true"/>
   </properties>
  </tile>
  <tile id="7202"/>
@@ -8308,13 +8203,12 @@
  </tile>
  <tile id="7320">
   <properties>
-   <property name="loop left wall" type="bool" value="true"/>
+   <property name="angle" type="float" value="270"/>
   </properties>
  </tile>
  <tile id="7321">
   <properties>
    <property name="angle" type="float" value="270"/>
-   <property name="loop left wall" type="bool" value="true"/>
   </properties>
  </tile>
  <tile id="7322"/>
@@ -8465,13 +8359,12 @@
  </tile>
  <tile id="7440">
   <properties>
-   <property name="loop left wall" type="bool" value="true"/>
+   <property name="angle" type="float" value="270"/>
   </properties>
  </tile>
  <tile id="7441">
   <properties>
    <property name="angle" type="float" value="270"/>
-   <property name="loop left wall" type="bool" value="true"/>
   </properties>
  </tile>
  <tile id="7442"/>
@@ -8678,13 +8571,12 @@
  </tile>
  <tile id="7560">
   <properties>
-   <property name="loop left wall" type="bool" value="true"/>
+   <property name="angle" type="float" value="270"/>
   </properties>
  </tile>
  <tile id="7561">
   <properties>
    <property name="angle" type="float" value="270"/>
-   <property name="loop left wall" type="bool" value="true"/>
   </properties>
  </tile>
  <tile id="7562"/>
@@ -8827,13 +8719,12 @@
  </tile>
  <tile id="7680">
   <properties>
-   <property name="loop left wall" type="bool" value="true"/>
+   <property name="angle" type="float" value="270"/>
   </properties>
  </tile>
  <tile id="7681">
   <properties>
    <property name="angle" type="float" value="270"/>
-   <property name="loop left wall" type="bool" value="true"/>
   </properties>
  </tile>
  <tile id="7682"/>
@@ -8976,13 +8867,12 @@
  </tile>
  <tile id="7800">
   <properties>
-   <property name="loop left wall" type="bool" value="true"/>
+   <property name="angle" type="float" value="270"/>
   </properties>
  </tile>
  <tile id="7801">
   <properties>
    <property name="angle" type="float" value="270"/>
-   <property name="loop left wall" type="bool" value="true"/>
   </properties>
  </tile>
  <tile id="7802"/>

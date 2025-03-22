@@ -1,5 +1,4 @@
-import pygame
-import os
+import pygame, os, json
 from constants import *
 
 pygame.init()
@@ -15,49 +14,75 @@ else:
     joystick = None  # No controller connected
 
 class Camera:
-    # Camera class that follows a target entity and handles viewport calculations
+    """Camera class that follows a target entity and handles viewport calculations"""
     def __init__(self, width, height):
-        # Initialize the camera with level dimensions
-        """
+        """Initialize the camera with level dimensions
+        
         Args:
             width (int): The width of the level
             height (int): The height of the level
         """
-        self.viewport = pygame.Rect(0, 0, width, height)
+        self.viewport = pygame.Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
         self.width = width
         self.height = height
         self.locked = False  # Add a lock state for the camera
-
+        self.offset_x = 0
+        self.offset_y = 0
+    
     def apply(self, entity):
-        # Offset an entity's position relative to the camera
-        """
+        """Apply camera offset to an individual entity
+        
         Args:
             entity (GameObject): The entity to apply camera offset to
             
         Returns:
             pygame.Rect: Offset rect for rendering
         """
-        return entity.rect.move(self.viewport.topleft)
-
-    def update(self, target):
-        # Move the camera to follow a target entity
-        """
+        return entity.rect.move(self.offset_x, self.offset_y)
+    
+    def apply_rect(self, rect):
+        """Apply camera offset to a rectangle
+        
         Args:
-            target (GameObject): The entity to follow (usually Sonic)
+            rect (pygame.Rect): The rectangle to offset
+            
+        Returns:
+            pygame.Rect: Offset rectangle
+        """
+        return rect.move(self.offset_x, self.offset_y)
+    
+    def update(self, target):
+        """Move the camera to follow a target entity
+        
+        Args:
+            target (GameObject): The entity to follow (usually Sonic/Tails)
         """
         # If camera is locked (during death sequence), don't update position
         if self.locked:
             return
-            
-        # Center the target in the screen
-        x = -target.rect.centerx + SCREEN_WIDTH // 2
-        y = -target.rect.centery + SCREEN_HEIGHT // 2
-
+        
+        # Calculate the offset to center the target on screen
+        self.offset_x = SCREEN_WIDTH // 2 - target.rect.centerx
+        self.offset_y = SCREEN_HEIGHT // 2 - target.rect.centery
+        
         # Clamp camera to level boundaries
-        x = max(-(self.width - SCREEN_WIDTH), min(0, x))
-        y = max(-(self.height - SCREEN_HEIGHT), min(0, y))
+        self.offset_x = min(0, max(-(self.width - SCREEN_WIDTH), self.offset_x))
+        self.offset_y = min(0, max(-(self.height - SCREEN_HEIGHT), self.offset_y))
+        
+        # Update viewport for other calculations
+        self.viewport = pygame.Rect(-self.offset_x, -self.offset_y, self.width, self.height)
 
-        self.viewport = pygame.Rect(x, y, self.width, self.height)
+class CameraAwareGroup(pygame.sprite.Group):
+    """A sprite group that automatically applies camera transformations."""
+    def __init__(self, camera):
+        super().__init__()
+        self.camera = camera
+
+    def draw(self, surface):
+        """Override draw to apply camera offsets."""
+        for sprite in self.sprites():
+            offset_rect = sprite.rect.move(self.camera.offset_x, self.camera.offset_y)
+            surface.blit(sprite.image, offset_rect)
 
 class Button:
     # Interactive button class for UI elements

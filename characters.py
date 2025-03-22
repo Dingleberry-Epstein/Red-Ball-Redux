@@ -11,15 +11,18 @@ pygame.mixer.init()
 
 class Character(pygame.sprite.Sprite):
     """Base class for all game characters"""
-    def __init__(self, x, y):
+    def __init__(self, x, y, image):
         super().__init__()
         self.x = int(x)
         self.y = int(y)
         self.width = 0
         self.height = 0
-        self.image = None
-        self.rect = None
-        self.mask = None
+        self.image = pygame.image.load(image).convert_alpha()
+        self.rect = self.image.get_rect(topleft=(self.x, self.y))
+        center_x = self.rect.centerx
+        center_y = self.rect.centery
+        self.hitbox = pygame.Rect(center_x - (self.rect.width // 4), center_y - (self.rect.height * 0.4), self.rect.width // 2, self.rect.height * 0.8)
+        self.mask = pygame.mask.from_surface(self.image)
         self.frame = 0
         self.image_index = 0
         self.Xvel = 0
@@ -55,6 +58,17 @@ class Character(pygame.sprite.Sprite):
         self.swing_speed = 2
         self.current_monkey_bar = None
         self.swing_animation_speed = 0.15
+        self.target_angle = 0
+        self.stoppingSoundPlayed = False  # Renamed from stopSoundPlayed
+        self.homing_image = homing_image  # Image to show over target
+        # Sensors for slope detection
+                    # Sensors for slope detection
+        self.sensor_front = pygame.Rect(self.hitbox.centerx + 10, self.hitbox.bottom, 5, 5)
+        self.sensor_back = pygame.Rect(self.hitbox.centerx - 10, self.hitbox.bottom, 5, 5)
+        
+        # Add a sensor for monkey bar detection (above Sonic)
+        self.sensor_top = pygame.Rect(self.hitbox.centerx - 5, self.hitbox.top - 5, 10, 5)
+
         
     def update_contact_mode(self):
         """Update character's contact mode based on the current angle."""
@@ -182,48 +196,6 @@ class Character(pygame.sprite.Sprite):
         self.x += self.Xvel
         self.y += self.Yvel
         
-    def update(self):
-        """Update character state - to be implemented by subclasses"""
-        pass
-        
-    def update_animation(self):
-        """Update animation state - to be implemented by subclasses"""
-        pass
-
-class Sonic(Character):
-    def __init__(self, x, y):
-        super().__init__(x, y)
-        self.width = 40 
-        self.height = 40
-        self.run_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicRun{i}.png")).convert_alpha() for i in range(1, 9)]
-        self.sprint_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicSprint{i}.png")).convert_alpha() for i in range(1, 9)]
-        self.boosting_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicBoost{i}.png")).convert_alpha() for i in range(1, 9)]
-        self.idle_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicIdle{i}.png")).convert_alpha() for i in range(1, 6)]
-        self.jump_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicJump{i}.png")).convert_alpha() for i in range(1, 5)]
-        self.stopping_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicStopping{i}.png")).convert_alpha() for i in range(1, 3)]
-        self.boost_overlay_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"boost{i}.png")).convert_alpha() for i in range(1, 4)]
-        # Add swinging animation frames
-        self.swinging_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"swing{i}.png")).convert_alpha() for i in range(1, 12)]
-        
-        self.image = self.idle_images[self.image_index]
-        self.rect = self.image.get_rect(topleft=(self.x, self.y))
-
-        center_x = self.rect.centerx
-        center_y = self.rect.centery
-        self.hitbox = pygame.Rect(center_x - (self.rect.width // 4), center_y - (self.rect.height * 0.4), self.rect.width // 2, self.rect.height * 0.8)
-        self.target_angle = 0
-        self.stoppingSoundPlayed = False  # Renamed from stopSoundPlayed
-        self.homing_image = homing_image  # Image to show over target
-
-        # Sensors for slope detection
-        self.sensor_front = pygame.Rect(self.hitbox.centerx + 10, self.hitbox.bottom, 5, 5)
-        self.sensor_back = pygame.Rect(self.hitbox.centerx - 10, self.hitbox.bottom, 5, 5)
-        
-        # Add a sensor for monkey bar detection (above Sonic)
-        self.sensor_top = pygame.Rect(self.hitbox.centerx - 5, self.hitbox.top - 5, 10, 5)
-        
-        self.mask = pygame.mask.from_surface(self.image)
-
     def update(self):
         keys = pygame.key.get_pressed()
         # Check if joystick is available
@@ -437,11 +409,13 @@ class Sonic(Character):
                 else:
                     self.stoppingSoundPlayed = False
                     
-                # Adjust movement vector based on angle
-                speed_vector = pygame.math.Vector2(self.groundSpeed, 0)
-                speed_vector = speed_vector.rotate(-self.angle)
-                self.Xvel = speed_vector.x
-                self.Yvel = speed_vector.y
+                # Create a movement vector based on ground speed
+                movement_vector = pygame.math.Vector2(self.groundSpeed, 0)
+                movement_vector = movement_vector.rotate(-self.angle)  # Rotate along the slope
+
+                self.Xvel = movement_vector.x
+                self.Yvel = movement_vector.y
+
 
         # Update Sonic's position
         self.x += self.Xvel
@@ -460,7 +434,7 @@ class Sonic(Character):
         self.update_animation()
         if not self.swinging:  # Only update contact mode when not swinging
             self.update_contact_mode()
-
+        
     def update_animation(self):
         # Calculate animation speed based on Sonic's state
         if self.swinging:
@@ -532,16 +506,108 @@ class Sonic(Character):
         if not self.swinging:
             self.image = pygame.transform.rotate(self.image, self.angle)
 
+        if not self.jumped:
+            self.mask = pygame.mask.from_surface(self.image)
+
+class Sonic(Character):
+    def __init__(self, x, y):
+        super().__init__(x, y, image=os.path.join("assets", "sprites", "Sonic", "SonicIdle1.png"))
+        self.width = 40 
+        self.height = 40
+        self.run_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicRun{i}.png")).convert_alpha() for i in range(1, 9)]
+        self.sprint_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicSprint{i}.png")).convert_alpha() for i in range(1, 9)]
+        self.boosting_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicBoost{i}.png")).convert_alpha() for i in range(1, 9)]
+        self.idle_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicIdle{i}.png")).convert_alpha() for i in range(1, 6)]
+        self.jump_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicJump{i}.png")).convert_alpha() for i in range(1, 5)]
+        self.stopping_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"SonicStopping{i}.png")).convert_alpha() for i in range(1, 3)]
+        self.boost_overlay_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"boost{i}.png")).convert_alpha() for i in range(1, 4)]
+        # Add swinging animation frames
+        self.swinging_images = [pygame.image.load(os.path.join("assets", "sprites", "Sonic", f"swing{i}.png")).convert_alpha() for i in range(1, 12)]
+        
+    def update(self):
+        super().update()
+
+    def update_animation(self):
+        super().update_animation()
+
 class Tails(Character):
     def __init__(self, x, y):
-        super().__init__(x, y)
+        super().__init__(x, y, image=os.path.join("assets", "sprites", "Tails", "tailsIdle1.png"))
         self.width = 30
         self.height = 30
-        self.run_images = [pygame.image.load(os.path.join("assets", "sprites", "Tails", f"tailsRun{i}.png")).convert_alpha() for i in range(1, 9)]
-        self.sprint_images = [pygame.image.load(os.path.join("assets", "sprites", "Tails", f"tailsSprint{i}.png")).convert_alpha() for i in range(1, 9)]
+        self.run_images = [pygame.image.load(os.path.join("assets", "sprites", "Tails", f"tailsRun{i}.png")).convert_alpha() for i in range(1, 10)]
+        self.sprint_images = [pygame.image.load(os.path.join("assets", "sprites", "Tails", f"tailsSprint{i}.png")).convert_alpha() for i in range(1, 10)]
         self.idle_images = [pygame.image.load(os.path.join("assets", "sprites", "Tails", f"tailsIdle{i}.png")).convert_alpha() for i in range(1, 16)]
-        self.image = self.idle_images[self.image_index]
-        self.rect = self.image.get_rect(topleft=(self.x, self.y))
-        self.mask = pygame.mask.from_surface(self.image)
-        self.target_angle = 0
-        self.stoppingSoundPlayed = False  # Renamed from stopSoundPlayed
+        # Load jump images and resize them to 50%
+        self.jump_images = []
+        for i in range(1, 9):
+            original = pygame.image.load(os.path.join("assets", "sprites", "Tails", f"tailsJump{i}.png")).convert_alpha()
+            width = original.get_width() // 1.5
+            height = original.get_height() // 1.5
+            self.jump_images.append(pygame.transform.scale(original, (width, height)))
+        self.stopping_images = [pygame.image.load(os.path.join("assets", "sprites", "Tails", f"tailsStop{i}.png")).convert_alpha() for i in range(1, 5)]
+
+    def update(self):
+        super().update()
+
+    def update_animation(self):
+        # Calculate animation speed based on character's state
+        if self.swinging:
+            # Use a constant animation speed for swinging
+            self.animation_speed = self.swing_animation_speed
+        else:
+            # Regular animation speed based on ground speed
+            self.animation_speed = min(0.1 + abs(self.groundSpeed) * 0.01, 0.5)
+
+        # Update animation frame based on animation speed
+        self.frame += self.animation_speed
+        
+        if self.groundSpeed > 0 and not self.jumped and not self.stopping:
+            # Calculate image index for running animations
+            if self.groundSpeed > 15:
+                self.image_index = int(self.frame) % len(self.sprint_images)
+                self.image = pygame.transform.flip(self.sprint_images[self.image_index], True, False)
+            else:
+                self.image_index = int(self.frame) % len(self.run_images)
+                self.image = pygame.transform.flip(self.run_images[self.image_index], True, False)
+                
+        elif self.groundSpeed < 0 and not self.jumped and not self.stopping:
+            if self.groundSpeed < -15:
+                self.image_index = int(self.frame) % len(self.sprint_images)
+                self.image = self.sprint_images[self.image_index]
+            else:
+                self.image_index = int(self.frame) % len(self.run_images)
+                self.image = self.run_images[self.image_index]
+                
+        elif self.groundSpeed == 0 and not self.jumped and not self.stopping:
+            self.image_index = int(self.frame) % len(self.idle_images)
+            if self.direction == -1:
+                self.image = pygame.transform.flip(self.idle_images[self.image_index], True, False)
+            elif self.direction == 1:
+                self.image = self.idle_images[self.image_index]
+
+        if self.jumped:
+            self.image_index = int(self.frame) % len(self.jump_images)
+            if self.groundSpeed > 0:
+                self.image = pygame.transform.flip(self.jump_images[self.image_index], True, False)
+            elif self.groundSpeed < 0:
+                self.image = self.jump_images[self.image_index]
+            else:
+                if self.direction == -1:
+                    self.image = pygame.transform.flip(self.jump_images[self.image_index], True, False)
+                elif self.direction == 1:
+                    self.image = self.jump_images[self.image_index]
+
+        if self.stopping and not self.jumped:
+            self.image_index = int(self.frame) % len(self.stopping_images)
+            if self.direction == -1:
+                self.image = self.stopping_images[self.image_index]
+            elif self.direction == 1:
+                self.image = pygame.transform.flip(self.stopping_images[self.image_index], True, False)
+        
+        # Only rotate if not swinging
+        if not self.swinging:
+            self.image = pygame.transform.rotate(self.image, self.angle)
+            self.rect = self.image.get_rect(center=self.rect.center)  # Maintain center position
+        if not self.jumped:
+            self.mask = pygame.mask.from_surface(self.image)

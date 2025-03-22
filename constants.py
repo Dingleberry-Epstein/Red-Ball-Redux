@@ -18,7 +18,7 @@ fallSound = pygame.mixer.Sound(os.path.join("assets", "sounds", "fall.mp3"))
 jumpSound = pygame.mixer.Sound(os.path.join("assets", "sounds", "Jumpsound.wav"))
 stoppingSound = pygame.mixer.Sound(os.path.join("assets", "sounds", "Brake.mp3"))
 
-gameover_font = pygame.font.Font(os.path.join("assets", "doom.ttf"), 128)
+gameover_font = pygame.font.Font(os.path.join("assets", "doom.ttf"), 64)
 GAMEOVER = gameover_font.render("GAME OVER", True, (0, 0, 0))
 GAMEOVER_rect = GAMEOVER.get_rect()
 GAMEOVER_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
