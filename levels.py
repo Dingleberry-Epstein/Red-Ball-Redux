@@ -210,7 +210,7 @@ class Windmill_Isle(Level):
                 # Adjust speed of rotation based on Sonic's speed
                 rotation_speed = max(5, abs(self.character.groundSpeed) * 0.3)  # Faster when moving fast
                 self.character.angle += angle_difference * 0.2 * rotation_speed
-            break  # Stop checking after the first collision
+                break  # Stop checking after the first collision
         if not self.character.grounded:
             # Reset angle smoothly back to 0 when in air
             self.character.angle += (0 - self.character.angle) * 0.15
