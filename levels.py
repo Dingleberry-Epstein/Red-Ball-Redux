@@ -202,20 +202,18 @@ class Windmill_Isle(Level):
                 self.character.Yvel = 0
                 self.character.grounded = True
                 self.character.jumped = False
-                if getattr(tile, "angle"):
-                    # Interpolate angle for smooth transition
-                    angle_difference = (tile.angle - self.character.angle) % 360
-                    if angle_difference > 180:
-                        angle_difference -= 360  # Take the shortest rotation direction
+                # Interpolate angle for smooth transition
+                angle_difference = (tile.angle - self.character.angle) % 360
+                if angle_difference > 180:
+                    angle_difference -= 360  # Take the shortest rotation direction
 
-                    # Adjust speed of rotation based on Sonic's speed
-                    rotation_speed = max(5, abs(self.character.groundSpeed) * 0.3)  # Faster when moving fast
-                    self.character.angle += angle_difference * 0.2 * rotation_speed
-                break  # Stop checking after the first collision
+                # Adjust speed of rotation based on Sonic's speed
+                rotation_speed = max(5, abs(self.character.groundSpeed) * 0.3)  # Faster when moving fast
+                self.character.angle += angle_difference * 0.2 * rotation_speed
+            break  # Stop checking after the first collision
         if not self.character.grounded:
             # Reset angle smoothly back to 0 when in air
             self.character.angle += (0 - self.character.angle) * 0.15
-
 
     def check_ring_collisions(self):
         current_time = pygame.time.get_ticks()
