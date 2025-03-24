@@ -222,13 +222,8 @@ class Windmill_Isle(Level):
         if not self.character.grounded:
             # Reset angle smoothly back to 0 when in air
             self.character.angle += (0 - self.character.angle) * 0.15
-            
-        # Reset launch state if we hit the ground
-        if self.character.grounded and self.character.launched:
-            self.character.launched = False
-            self.character.launch_timer = 0
-            print("Launch ended due to ground collision")
-    
+
+
     def check_ring_collisions(self):
         current_time = pygame.time.get_ticks()
         """Checks if Sonic collects any rings."""
