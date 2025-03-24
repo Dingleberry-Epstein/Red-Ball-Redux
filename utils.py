@@ -14,14 +14,9 @@ else:
     joystick = None  # No controller connected
 
 class Camera:
-    """Camera class that follows a target entity and handles viewport calculations"""
+    # Camera class that follows a target entity and handles viewport calculations"""
     def __init__(self, width, height):
-        """Initialize the camera with level dimensions
-        
-        Args:
-            width (int): The width of the level
-            height (int): The height of the level
-        """
+
         self.viewport = pygame.Rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
         self.width = width
         self.height = height
@@ -29,34 +24,21 @@ class Camera:
         self.offset_x = 0
         self.offset_y = 0
     
-    def apply(self, entity):
-        """Apply camera offset to an individual entity
-        
-        Args:
-            entity (GameObject): The entity to apply camera offset to
-            
-        Returns:
-            pygame.Rect: Offset rect for rendering
-        """
-        return entity.rect.move(self.offset_x, self.offset_y)
-    
+    def apply(self, obj):
+        # Apply camera offset to an entity or rect.
+
+        if isinstance(obj, pygame.Rect):
+            return obj.move(self.offset_x, self.offset_y)
+        return obj.rect.move(self.offset_x, self.offset_y)
+
     def apply_rect(self, rect):
-        """Apply camera offset to a rectangle
-        
-        Args:
-            rect (pygame.Rect): The rectangle to offset
-            
-        Returns:
-            pygame.Rect: Offset rectangle
-        """
+       # Apply camera offset to a rectangle
+
         return rect.move(self.offset_x, self.offset_y)
     
     def update(self, target):
-        """Move the camera to follow a target entity
-        
-        Args:
-            target (GameObject): The entity to follow (usually Sonic/Tails)
-        """
+        # Move the camera to follow a target entity
+
         # If camera is locked (during death sequence), don't update position
         if self.locked:
             return

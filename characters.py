@@ -1,5 +1,4 @@
-# characters.py - Character classes with proper inheritance
-import pygame, math, random
+import pygame, math, random, numpy
 from constants import *
 from objects import *
 from utils import joystick
@@ -19,10 +18,24 @@ class Character(pygame.sprite.Sprite):
         self.height = 0
         self.image = pygame.image.load(image).convert_alpha()
         self.rect = self.image.get_rect(topleft=(self.x, self.y))
-        center_x = self.rect.centerx
-        center_y = self.rect.centery
-        self.hitbox = pygame.Rect(center_x - (self.rect.width // 4), center_y - (self.rect.height * 0.4), self.rect.width // 2, self.rect.height * 0.8)
-        self.mask = pygame.mask.from_surface(self.image)
+        self.hitbox = pygame.Rect(((self.rect.x//2) + 100),(self.rect.y +50), (self.rect.width//2), (self.rect.height * 0.8))
+        
+        # Sensors for ground detection
+        self.left_sensor = None
+        self.right_sensor = None
+        self.left_sensor_mask = None
+        self.right_sensor_mask = None
+        self.sensor_thickness = 2  # How thick the sensor line is
+        self.sensor_extension = 2  # How many pixels below the hitbox
+        self.init_sensors()
+        
+        # Collision information
+        self.grounded = False
+        self.last_ground_y = 0
+        self.current_ground_tile = None
+        self.slope_transition = False
+        
+        # Rest of the original initialization code...
         self.frame = 0
         self.image_index = 0
         self.Xvel = 0
@@ -30,7 +43,6 @@ class Character(pygame.sprite.Sprite):
         self.direction = 0
         self.groundSpeed = 0
         self.jumped = False
-        self.grounded = False
         self.stopping = False
         self.stopSoundPlayed = False
         self.jumpSoundPlayed = False
@@ -59,17 +71,105 @@ class Character(pygame.sprite.Sprite):
         self.current_monkey_bar = None
         self.swing_animation_speed = 0.15
         self.target_angle = 0
-        self.stoppingSoundPlayed = False  # Renamed from stopSoundPlayed
-        self.homing_image = homing_image  # Image to show over target
-        # Sensors for slope detection
-                    # Sensors for slope detection
-        self.sensor_front = pygame.Rect(self.hitbox.centerx + 10, self.hitbox.bottom, 5, 5)
-        self.sensor_back = pygame.Rect(self.hitbox.centerx - 10, self.hitbox.bottom, 5, 5)
+        self.stoppingSoundPlayed = False
+        self.homing_image = homing_image
         
-        # Add a sensor for monkey bar detection (above Sonic)
-        self.sensor_top = pygame.Rect(self.hitbox.centerx - 5, self.hitbox.top - 5, 10, 5)
+    def init_sensors(self):
+        """Initialize the ground sensors as surfaces with masks"""
+        # Create left sensor surface
+        self.left_sensor = pygame.Surface((self.sensor_thickness, self.hitbox.height // 2 + self.sensor_extension), pygame.SRCALPHA)
+        self.left_sensor.fill((0, 0, 255, 128))  # Semi-transparent blue for debugging
+        
+        # Create right sensor surface
+        self.right_sensor = pygame.Surface((self.sensor_thickness, self.hitbox.height // 2 + self.sensor_extension), pygame.SRCALPHA)
+        self.right_sensor.fill((0, 0, 255, 128))  # Semi-transparent blue for debugging
+        
+        # Create masks from the sensors
+        self.left_sensor_mask = pygame.mask.from_surface(self.left_sensor)
+        self.right_sensor_mask = pygame.mask.from_surface(self.right_sensor)
 
+    def update_sensors(self):
+        """Update the position of the sensors based on Sonic's hitbox"""
+        # Position the left sensor at the bottom-left of the hitbox
+        self.left_sensor_pos = (
+            self.hitbox.left, 
+            self.hitbox.centery
+        )
         
+        # Position the right sensor at the bottom-right of the hitbox
+        self.right_sensor_pos = (
+            self.hitbox.right - self.sensor_thickness, 
+            self.hitbox.centery
+        )
+    
+    def check_sensor_collision(self, tile):
+        """Check if either sensor collides with a tile using mask collision"""
+        # Skip if the tile doesn't have a mask
+        if not hasattr(tile, 'mask') or tile.mask is None:
+            return False, 0
+        
+        # Get the relative positions for mask overlap check
+        left_offset = (
+            self.left_sensor_pos[0] - tile.rect.x,
+            self.left_sensor_pos[1] - tile.rect.y
+        )
+        
+        right_offset = (
+            self.right_sensor_pos[0] - tile.rect.x,
+            self.right_sensor_pos[1] - tile.rect.y
+        )
+        
+        # Check for overlap with both sensors
+        left_overlap = tile.mask.overlap(self.left_sensor_mask, left_offset)
+        right_overlap = tile.mask.overlap(self.right_sensor_mask, right_offset)
+        
+        # If there's an overlap, find the highest point for adjustment
+        highest_overlap_y = None
+        if left_overlap:
+            highest_overlap_y = left_overlap[1] + tile.rect.y
+        
+        if right_overlap:
+            right_overlap_y = right_overlap[1] + tile.rect.y
+            if highest_overlap_y is None or right_overlap_y < highest_overlap_y:
+                highest_overlap_y = right_overlap_y
+        
+        return (left_overlap is not None or right_overlap is not None), highest_overlap_y
+    
+    def adjust_position_to_ground(self, highest_point):
+        """Adjust the character's position to rest on the ground"""
+        if highest_point is not None:
+            # Adjust Y position to rest exactly on the ground
+            # Accounting for the sensor extension below the hitbox
+            target_y = highest_point - (self.hitbox.height + self.sensor_extension)
+            
+            # Don't adjust if we're above the ground
+            if self.hitbox.bottom <= highest_point:
+                # Move smoothly to the target position when on a slope
+                if abs(self.hitbox.bottom - highest_point) <= 5:  # Small step threshold
+                    # For gentle slopes, adjust pixel by pixel
+                    self.y += (target_y - self.y) * 0.3  # Smooth factor
+                else:
+                    # For larger steps, snap directly
+                    self.y = target_y
+                
+                # Update rectangles
+                self.rect.y = self.y
+                self.hitbox.y = (self.rect.y + 50)
+                
+                # Set grounded state
+                self.grounded = True
+                self.jumped = False
+                
+                # Store last ground position for reference
+                self.last_ground_y = self.y
+            
+            # Calculate angle based on left and right sensor heights
+            # (simplified for now)
+            self.angle = 0  # Will be calculated based on sensor data
+        else:
+            # Not grounded
+            self.grounded = False
+
     def update_contact_mode(self):
         """Update character's contact mode based on the current angle."""
         if 316 <= self.angle <= 360 or 0 <= self.angle <= 44:
@@ -89,8 +189,8 @@ class Character(pygame.sprite.Sprite):
 
         all_targets = list(enemies) + list(springs)
         for target in all_targets:
-            distance = math.sqrt((target.rect.centerx - self.rect.centerx) ** 2 +
-                                 (target.rect.centery - self.rect.centery) ** 2)
+            distance = math.sqrt((target.rect.centerx - self.hitbox.centerx) ** 2 +
+                                 (target.rect.centery - self.hitbox.centery) ** 2)
             if distance < min_distance:
                 min_distance = distance
                 nearest_target = target
@@ -225,13 +325,8 @@ class Character(pygame.sprite.Sprite):
             self.rect.x = self.x
             self.y += self.Yvel
             self.rect.y = self.y
-            self.hitbox.x = self.x
-            self.hitbox.y = self.y
-            
-            # Update sensors
-            self.sensor_front.midbottom = (self.hitbox.centerx + 10, self.hitbox.bottom)
-            self.sensor_back.midbottom = (self.hitbox.centerx - 10, self.hitbox.bottom)
-            self.sensor_top.midtop = (self.hitbox.centerx, self.hitbox.top)
+            self.hitbox.centerx = self.rect.centerx
+            self.hitbox.centery = self.rect.centery
             
             # Update animation
             self.update_animation()
@@ -422,19 +517,16 @@ class Character(pygame.sprite.Sprite):
         self.rect.x = self.x
         self.y += self.Yvel
         self.rect.y = self.y
-        self.hitbox.x = self.x
-        self.hitbox.y = self.y
-
-        # Update regular sensors' position
-        self.sensor_front.midbottom = (self.hitbox.centerx + 10, self.hitbox.bottom)
-        self.sensor_back.midbottom = (self.hitbox.centerx - 10, self.hitbox.bottom)
-        self.sensor_top.midtop = (self.hitbox.centerx, self.hitbox.top)
+        self.hitbox.x = ((self.rect.x//2) + 100)
+        self.hitbox.y = (self.rect.y + 50)
+        self.hitbox.center = self.rect.center
+        self.hitbox.bottom = self.rect.bottom
 
         # Update animation
         self.update_animation()
         if not self.swinging:  # Only update contact mode when not swinging
             self.update_contact_mode()
-        
+
     def update_animation(self):
         # Calculate animation speed based on Sonic's state
         if self.swinging:
@@ -505,9 +597,6 @@ class Character(pygame.sprite.Sprite):
         # Only rotate if not swinging
         if not self.swinging:
             self.image = pygame.transform.rotate(self.image, self.angle)
-
-        if not self.jumped:
-            self.mask = pygame.mask.from_surface(self.image)
 
 class Sonic(Character):
     def __init__(self, x, y):
@@ -609,5 +698,3 @@ class Tails(Character):
         if not self.swinging:
             self.image = pygame.transform.rotate(self.image, self.angle)
             self.rect = self.image.get_rect(center=self.rect.center)  # Maintain center position
-        if not self.jumped:
-            self.mask = pygame.mask.from_surface(self.image)

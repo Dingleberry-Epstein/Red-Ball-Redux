@@ -1242,7 +1242,13 @@
          "type":"25"
         }, 
         {
-         "id":308
+         "id":308,
+         "properties":[
+                {
+                 "name":"loop switch",
+                 "type":"bool",
+                 "value":true
+                }]
         }, 
         {
          "id":309

@@ -69,7 +69,7 @@ class Windmill_Isle(Level):
                     tile_y = y * 64
 
                     tile_properties = Windmill_Isle_TMX.get_tile_properties(x, y, layer_index)
-                    angle = tile_properties.get("angle", 0) if tile_properties else 0
+                    angle = int(tile_properties.get("angle", 0) if tile_properties else 0)
 
                     tile_image = Windmill_Isle_TMX.get_tile_image(x, y, layer_index)
 
@@ -127,7 +127,7 @@ class Windmill_Isle(Level):
         return tile_group
 
     def handle_tile_collision(self):
-        """Handles Sonic's collision with tiles efficiently."""
+        """Handles Sonic's collision with tiles efficiently using sensors."""
         
         # If Sonic is already on monkey bars, we handle them differently
         if self.character.swinging:
@@ -149,27 +149,17 @@ class Windmill_Isle(Level):
         # Only check if Sonic is in the air (jumping or falling)
         if not self.character.grounded:  # Allow grabbing when in air (falling or jumping)
             for bar in self.monkey_bars:
-                if pygame.Rect.colliderect(self.character.sensor_top, bar.rect):
+                if pygame.Rect.colliderect(self.character.hitbox, bar.rect):
                     self.character.grab_monkey_bar(bar)
                     return  # Exit after grabbing
         
+        # Handle springs
         for spring in self.springs:
             # Use rect collision first as a quick check
             if pygame.Rect.colliderect(self.character.hitbox, spring.rect):
-                # Then do a more precise mask collision check
-                offset_x = spring.rect.x - self.character.hitbox.x
-                offset_y = spring.rect.y - self.character.hitbox.y
-                
-                # Make sure spring has a mask
-                if not hasattr(spring, 'mask') or spring.mask is None:
-                    spring.mask = pygame.mask.from_surface(spring.image)
-                    
-                # Make sure sonic has a mask
-                if not hasattr(self.character, 'mask') or self.character.mask is None:
-                    self.character.mask = pygame.mask.from_surface(self.character.image)
                     
                 # Check for mask collision
-                if self.character.mask.overlap(spring.mask, (offset_x, offset_y)):
+                if self.character.hitbox.colliderect(spring.rect):
                     print("Spring activated!") # Debug message
                     self.character.activate_spring(spring.angle, spring.force)
                     # **Ensure every spring always plays its sound**
@@ -182,41 +172,63 @@ class Windmill_Isle(Level):
                         spring.sound_played = True  # Prevent repeated triggers
                     
                 spring.sound_played = False  # Reset sound flag after collision check
-
-        # Default assumption - not on ground
-        self.character.grounded = False  
-
-        for tile in self.tile_group:
-            # Skip non-collideable tiles and monkey bars for regular collision
+        
+        # Use the new sensor-based collision detection for tiles
+        if self.character.launched:
+            # Skip ground detection when launched
+            return
+        
+        # Get only nearby tiles for performance
+        nearby_tiles = [tile for tile in self.tile_group 
+                        if abs(tile.rect.centerx - self.character.rect.centerx) < 200 
+                        and abs(tile.rect.centery - self.character.rect.centery) < 200]
+        
+        # Reset ground state
+        self.character.grounded = False
+        highest_ground = None
+        
+        # Update character sensors
+        self.character.update_sensors()
+        
+        # Check for collisions with each tile
+        for tile in nearby_tiles:
+            # Skip non-collideable tiles and monkey bars
             if not getattr(tile, "collideable", True) or getattr(tile, "is_monkey_bar", False):
                 continue
-
-            if self.character.mask.overlap(tile.mask, (tile.rect.x - self.character.hitbox.x, tile.rect.y - self.character.hitbox.y)):
-
-                if self.character.launched:
-                    self.character.launched = False
-                    self.character.launch_timer = 0
-                    print("Launch ended early due to tile collision")
-
-                # Sonic collides with the tile
-                self.character.Yvel = 0
-                self.character.grounded = True
-                self.character.jumped = False
-                if getattr(tile, "angle"):
-                    # Interpolate angle for smooth transition
-                    angle_difference = (tile.angle - self.character.angle) % 360
-                    if angle_difference > 180:
-                        angle_difference -= 360  # Take the shortest rotation direction
-
-                    # Adjust speed of rotation based on Sonic's speed
-                    rotation_speed = max(5, abs(self.character.groundSpeed) * 0.3)  # Faster when moving fast
-                    self.character.angle += angle_difference * 0.2 * rotation_speed
-                break  # Stop checking after the first collision
+            
+            # Ensure the tile has a mask for pixel-perfect collision
+            if not hasattr(tile, 'mask'):
+                # Create a mask if it doesn't exist
+                tile.mask = pygame.mask.from_surface(tile.image)
+            
+            # Check sensor collision with this tile
+            collision, highest_point = self.character.check_sensor_collision(tile)
+            if collision:
+                # Track the highest ground point (lowest Y value)
+                if highest_ground is None or highest_point < highest_ground:
+                    highest_ground = highest_point
+                    self.character.current_ground_tile = tile
+        
+        # Adjust position based on the highest ground found
+        if highest_ground is not None:
+            self.character.adjust_position_to_ground(highest_ground)
+            
+            # Update character properties for grounded state
+            self.character.grounded = True
+            self.character.jumped = False
+            if hasattr(self.character.current_ground_tile, 'angle'):
+                self.character.angle = self.character.current_ground_tile.angle
+        
         if not self.character.grounded:
             # Reset angle smoothly back to 0 when in air
             self.character.angle += (0 - self.character.angle) * 0.15
-
-
+            
+        # Reset launch state if we hit the ground
+        if self.character.grounded and self.character.launched:
+            self.character.launched = False
+            self.character.launch_timer = 0
+            print("Launch ended due to ground collision")
+    
     def check_ring_collisions(self):
         current_time = pygame.time.get_ticks()
         """Checks if Sonic collects any rings."""
@@ -239,20 +251,44 @@ class Windmill_Isle(Level):
         # Draw tiles using camera offsets
         for tile in self.tile_group:
             screen.blit(tile.image, self.camera.apply(tile))
-        
+
         for spring in self.springs:
             screen.blit(spring.image, self.camera.apply(spring))
 
         # Draw Sonic
         screen.blit(self.character.image, self.camera.apply(self.character))
+        
+        # Draw hitboxes for debugging
+        offset_hitbox = self.camera.apply_rect(self.character.hitbox)
+        offset_rect = self.camera.apply_rect(self.character.rect)
 
-                # Convert mask to surface for debugging
-        mask_surface = self.character.mask.to_surface(setcolor=(255, 0, 0, 100), unsetcolor=(0, 0, 0, 0))  # Red overlay, transparent background
-        mask_surface.set_colorkey((0, 0, 0))  # Make black transparent
+        # Draw Sonic's bounding box (green)
+        pygame.draw.rect(screen, (0, 255, 0), offset_rect, 1)
 
-        # Blit mask over character
-        screen.blit(mask_surface, self.camera.apply(self.character))
-
+        # Draw Sonic's hitbox (red)
+        pygame.draw.rect(screen, (255, 0, 0), offset_hitbox, 1)
+        
+        # Draw sensors if they exist
+        if hasattr(self.character, 'left_sensor_pos') and hasattr(self.character, 'right_sensor_pos'):
+            # Calculate sensor positions with camera offset
+            left_sensor_rect = pygame.Rect(
+                self.character.left_sensor_pos[0] - self.camera.viewport.x,
+                self.character.left_sensor_pos[1] - self.camera.viewport.y,
+                self.character.sensor_thickness,
+                self.character.left_sensor.get_height()
+            )
+            
+            right_sensor_rect = pygame.Rect(
+                self.character.right_sensor_pos[0] - self.camera.viewport.x,
+                self.character.right_sensor_pos[1] - self.camera.viewport.y,
+                self.character.sensor_thickness,
+                self.character.right_sensor.get_height()
+            )
+            
+            # Draw the sensors
+            pygame.draw.rect(screen, (0, 0, 255), left_sensor_rect)
+            pygame.draw.rect(screen, (0, 0, 255), right_sensor_rect)
+        
         # Draw rings
         for ring in self.rings:
             screen.blit(ring.image, self.camera.apply(ring))
@@ -265,7 +301,7 @@ class Windmill_Isle(Level):
         ring_counter_display = RingFont.render("RINGS: " + str(self.ring_counter), True, (255, 255, 255))
         screen.blit(ring_counter_display, (0, 0))
 
-        # **Draw homing target indicator (scaled and centered)**
+        # Draw homing target indicator
         if self.character.homing_target and not self.character.homing_attack_active:
             target_rect = self.character.homing_target.rect
             homing_scaled = pygame.transform.smoothscale(homing_image, (target_rect.width, target_rect.height))
