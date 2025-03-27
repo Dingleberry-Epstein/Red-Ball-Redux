@@ -1,7 +1,7 @@
 import pygame, math, random, numpy
 from constants import *
 from objects import *
-from utils import joystick
+from utils import joystick, Mask
 
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
@@ -9,37 +9,89 @@ clock = pygame.time.Clock()
 pygame.mixer.init()
 
 class Character(pygame.sprite.Sprite):
-    """Base class for all game characters"""
+    """Base class for all game characters, incorporating a detailed hitbox and multiple collision sensors 
+    for precise, pixel-perfect collision handling (including angled movement)."""
     def __init__(self, x, y, image):
         super().__init__()
-        self.x = int(x)
-        self.y = int(y)
-        self.width = 0
-        self.height = 0
+        self.x = float(x)
+        self.y = float(y)
+        
+        # Load sprite image with transparency
         self.image = pygame.image.load(image).convert_alpha()
         self.rect = self.image.get_rect(topleft=(self.x, self.y))
-        self.hitbox = pygame.Rect(((self.rect.x//2) + 100),(self.rect.y +50), (self.rect.width//2), (self.rect.height * 0.8))
         
-        # Sensors for ground detection
-        self.left_sensor = None
-        self.right_sensor = None
-        self.left_sensor_mask = None
-        self.right_sensor_mask = None
-        self.sensor_thickness = 2  # How thick the sensor line is
-        self.sensor_extension = 2  # How many pixels below the hitbox
-        self.init_sensors()
+        # Refined hitbox: this hitbox is configured for more accurate collision detection.
+        # Adjust the offsets as necessary to match your sprite and level design.
+        self.hitbox = pygame.Rect(
+            ((self.rect.x // 2) + 100),   # X offset (may be adjusted)
+            (self.rect.y + 50),           # Y offset (may be adjusted)
+            (self.rect.width // 2),       # Width
+            int(self.rect.height * 0.8)    # Height
+        )
         
-        # Collision information
-        self.grounded = False
-        self.last_ground_y = 0
-        self.current_ground_tile = None
-        self.slope_transition = False
+        # --- Create Collision Sensors ---
+        # Define sensor rectangles based on the hitbox dimensions. Each sensor returns a sensor list:
+        # [mask, shifted_rect, original_rect] as per the Mask class design.
         
-        # Rest of the original initialization code...
+        # Left sensor: placed along the left side of the hitbox.
+        left_sensor_rect = (
+            self.hitbox.x,  # Far left of hitbox
+            self.hitbox.y,  
+            2,  # Thin 2-pixel wide sensor
+            self.hitbox.height
+        )
+        right_sensor_rect = (
+            self.hitbox.right - 2,  # Far right of hitbox, 2 pixels wide
+            self.hitbox.y,  
+            2,  
+            self.hitbox.height
+        )
+        top_sensor_rect = (
+            self.hitbox.x,
+            self.hitbox.y,
+            self.hitbox.width,
+            2  # Thin 2-pixel high sensor
+        )
+        bottom_sensor_rect = (
+            self.hitbox.x,
+            self.hitbox.bottom - 2,  # Bottom of hitbox, 2 pixels high
+            self.hitbox.width,
+            2
+        )
+        
+        # Create sensors using Mask class
+        # Center point is the middle of the sensor's width/height
+        self.left_sensor = Mask.newSensor(
+            left_sensor_rect, 
+            (1, self.hitbox.height // 2)
+        )
+        self.right_sensor = Mask.newSensor(
+            right_sensor_rect, 
+            (1, self.hitbox.height // 2)
+        )
+        self.top_sensor = Mask.newSensor(
+            top_sensor_rect,
+            (self.hitbox.width // 2, 1)
+        )
+        self.bottom_sensor = Mask.newSensor(
+            bottom_sensor_rect,
+            (self.hitbox.width // 2, 1)
+        )
+        
+        # --- Collision State Attributes ---
+        # These flags and properties let you handle collision outcomes based on sensor data.
+        self.grounded = False           # Is the player on the ground?
+        self.left_grounded = False      # Is the player's left side in contact?
+        self.right_grounded = False     # Is the player's right side in contact?
+        self.last_ground_y = 0          # Previous ground contact Y, used to calculate slopes.
+        self.current_ground_tile = None # Stores the current tile (from Tiled) the player is on.
+        self.slope_transition = False   # Indicates if the character is transitioning between slopes.
+        
+        # --- Movement and Physics Properties (Sonic-style) ---
         self.frame = 0
         self.image_index = 0
-        self.Xvel = 0
-        self.Yvel = 0
+        self.Xvel = 0              # Horizontal velocity
+        self.Yvel = 0              # Vertical velocity
         self.direction = 0
         self.groundSpeed = 0
         self.jumped = False
@@ -54,8 +106,15 @@ class Character(pygame.sprite.Sprite):
         self.friction = 0.46875
         self.maxSpeed = 20
         self.gravityforce = 0.5
+        
+        # --- Angular Collision Handling ---
+        # Angle (in degrees or arbitrary units) represents the slope of the ground.
         self.angle = 0
+        # contact_mode can be FLOOR, CEILING, LEFT, or RIGHT.
+        # This value, used with sensor rotation methods, defines which side is in contact.
         self.contact_mode = FLOOR
+        
+        # --- Advanced Movement States ---
         self.boosting = False
         self.swinging = False
         self.launched = False
@@ -72,103 +131,9 @@ class Character(pygame.sprite.Sprite):
         self.swing_animation_speed = 0.15
         self.target_angle = 0
         self.stoppingSoundPlayed = False
+        
+        # Homing image – used when performing a homing attack (assumed to be loaded elsewhere)
         self.homing_image = homing_image
-        
-    def init_sensors(self):
-        """Initialize the ground sensors as surfaces with masks"""
-        # Create left sensor surface
-        self.left_sensor = pygame.Surface((self.sensor_thickness, self.hitbox.height // 2 + self.sensor_extension), pygame.SRCALPHA)
-        self.left_sensor.fill((0, 0, 255, 128))  # Semi-transparent blue for debugging
-        
-        # Create right sensor surface
-        self.right_sensor = pygame.Surface((self.sensor_thickness, self.hitbox.height // 2 + self.sensor_extension), pygame.SRCALPHA)
-        self.right_sensor.fill((0, 0, 255, 128))  # Semi-transparent blue for debugging
-        
-        # Create masks from the sensors
-        self.left_sensor_mask = pygame.mask.from_surface(self.left_sensor)
-        self.right_sensor_mask = pygame.mask.from_surface(self.right_sensor)
-
-    def update_sensors(self):
-        """Update the position of the sensors based on Sonic's hitbox"""
-        # Position the left sensor at the bottom-left of the hitbox
-        self.left_sensor_pos = (
-            self.hitbox.left, 
-            self.hitbox.centery
-        )
-        
-        # Position the right sensor at the bottom-right of the hitbox
-        self.right_sensor_pos = (
-            self.hitbox.right - self.sensor_thickness, 
-            self.hitbox.centery
-        )
-    
-    def check_sensor_collision(self, tile):
-        """Check if either sensor collides with a tile using mask collision"""
-        # Skip if the tile doesn't have a mask
-        if not hasattr(tile, 'mask') or tile.mask is None:
-            return False, 0
-        
-        # Get the relative positions for mask overlap check
-        left_offset = (
-            self.left_sensor_pos[0] - tile.rect.x,
-            self.left_sensor_pos[1] - tile.rect.y
-        )
-        
-        right_offset = (
-            self.right_sensor_pos[0] - tile.rect.x,
-            self.right_sensor_pos[1] - tile.rect.y
-        )
-        
-        # Check for overlap with both sensors
-        left_overlap = tile.mask.overlap(self.left_sensor_mask, left_offset)
-        right_overlap = tile.mask.overlap(self.right_sensor_mask, right_offset)
-        
-        # If there's an overlap, find the highest point for adjustment
-        highest_overlap_y = None
-        if left_overlap:
-            highest_overlap_y = left_overlap[1] + tile.rect.y
-        
-        if right_overlap:
-            right_overlap_y = right_overlap[1] + tile.rect.y
-            if highest_overlap_y is None or right_overlap_y < highest_overlap_y:
-                highest_overlap_y = right_overlap_y
-        
-        return (left_overlap is not None or right_overlap is not None), highest_overlap_y
-    
-    def adjust_position_to_ground(self, highest_point):
-        """Adjust the character's position to rest on the ground"""
-        if highest_point is not None:
-            # Adjust Y position to rest exactly on the ground
-            # Accounting for the sensor extension below the hitbox
-            target_y = highest_point - (self.hitbox.height + self.sensor_extension)
-            
-            # Don't adjust if we're above the ground
-            if self.hitbox.bottom <= highest_point:
-                # Move smoothly to the target position when on a slope
-                if abs(self.hitbox.bottom - highest_point) <= 5:  # Small step threshold
-                    # For gentle slopes, adjust pixel by pixel
-                    self.y += (target_y - self.y) * 0.3  # Smooth factor
-                else:
-                    # For larger steps, snap directly
-                    self.y = target_y
-                
-                # Update rectangles
-                self.rect.y = self.y
-                self.hitbox.y = (self.rect.y + 50)
-                
-                # Set grounded state
-                self.grounded = True
-                self.jumped = False
-                
-                # Store last ground position for reference
-                self.last_ground_y = self.y
-            
-            # Calculate angle based on left and right sensor heights
-            # (simplified for now)
-            self.angle = 0  # Will be calculated based on sensor data
-        else:
-            # Not grounded
-            self.grounded = False
 
     def update_contact_mode(self):
         """Update character's contact mode based on the current angle."""
@@ -180,7 +145,39 @@ class Character(pygame.sprite.Sprite):
             self.contact_mode = CEILING
         elif 225 <= self.angle <= 315:
             self.contact_mode = LEFT_WALL
-            
+
+    def update_sensors(self):
+        """Create precise bottom-edge sensors for ground detection"""
+        # Very short, precise sensors
+        sensor_thickness = 1
+        sensor_height = 2  # Just enough to detect the ground
+        
+        # Position sensors at the bottom corners of the hitbox
+        left_sensor_rect = (
+            self.hitbox.left,
+            self.hitbox.bottom - sensor_height,
+            sensor_thickness,
+            sensor_height
+        )
+        
+        right_sensor_rect = (
+            self.hitbox.right - sensor_thickness,
+            self.hitbox.bottom - sensor_height,
+            sensor_thickness,
+            sensor_height
+        )
+        
+        # Create sensors with precise positioning
+        self.left_sensor = Mask.newSensor(
+            left_sensor_rect, 
+            (0, sensor_height - 1)  # Center point at the very bottom
+        )
+        
+        self.right_sensor = Mask.newSensor(
+            right_sensor_rect, 
+            (0, sensor_height - 1)  # Center point at the very bottom
+        )
+
     def find_homing_target(self, enemies, springs):
         """Scans for the closest enemy or spring when character jumps."""
         homing_range = 200
@@ -297,65 +294,48 @@ class Character(pygame.sprite.Sprite):
         self.y += self.Yvel
         
     def update(self):
+        """Calculate velocity and animation state but don't update position"""
         keys = pygame.key.get_pressed()
-        # Check if joystick is available
+        # Controller input handling
         if joystick:
-            left_stick_x = joystick.get_axis(0)  # Left stick horizontal movement
-            left_stick_y = joystick.get_axis(1)  # Left stick vertical movement
-            dpad_x = joystick.get_hat(0)[0]  # D-pad horizontal movement
-            dpad_y = joystick.get_hat(0)[1]  # D-pad vertical movement
-            boost_button = joystick.get_axis(5)  # R2 / RT
-            jump_button = joystick.get_button(0)  # A / Cross
+            left_stick_x = joystick.get_axis(0)
+            left_stick_y = joystick.get_axis(1)
+            dpad_x = joystick.get_hat(0)[0]
+            dpad_y = joystick.get_hat(0)[1]
+            boost_button = joystick.get_axis(5)
+            jump_button = joystick.get_button(0)
         else:
-            left_stick_x = 0
-            left_stick_y = 0
-            dpad_x = 0
-            dpad_y = 0
-            boost_button = False
-            jump_button = False
+            left_stick_x = left_stick_y = dpad_x = dpad_y = 0
+            boost_button = jump_button = False
 
         # Handle launched state (from springs)
         if self.launched:
-            # While launching, maintain constant velocity in the launch direction
             self.Xvel = self.launch_x_vel
             self.Yvel = self.launch_y_vel
             
-            # Update position
-            self.x += self.Xvel
-            self.rect.x = self.x
-            self.y += self.Yvel
-            self.rect.y = self.y
-            self.hitbox.centerx = self.rect.centerx
-            self.hitbox.centery = self.rect.centery
-            
-            # Update animation
+            # Just update animation and decrease timer
             self.update_animation()
             self.update_contact_mode()
             
-            # Decrease timer
             self.launch_timer -= 1
             if self.launch_timer <= 0:
-                # When launch ends, preserve velocity for smooth transition
                 self.launched = False
-                self.groundSpeed = self.Xvel  # Transfer X velocity to ground speed
-                
-            # Exit early to prevent any other code from running during launch
+                self.groundSpeed = self.Xvel
             return
 
-        # **Cancel homing target if Sonic lands**
+        # Homing attack logic
         if self.grounded or not self.jumped:
             self.reset_homing_target()
 
         if not keys[pygame.K_SPACE] and not jump_button:
             self.can_home = True
 
-        # **Only trigger homing attack if SPACE is pressed and a target exists**
         if self.homing_target and keys[pygame.K_SPACE] and not self.homing_attack_active and self.can_home:
             self.start_homing_attack()
         
-        # Special handling for swinging on monkey bars
+        # Monkey bar swinging
         if self.swinging:
-            # Handle left/right movement on monkey bars
+            # Handle movement on bars
             if keys[pygame.K_LEFT] or keys[pygame.K_a] or left_stick_x < -0.5 or dpad_x == -1:
                 self.swing_direction = -1
                 self.Xvel = -self.swing_speed
@@ -366,40 +346,35 @@ class Character(pygame.sprite.Sprite):
                 self.Xvel = 0
                 self.swing_direction = 0
             
-            # Dropping or jumping off the monkey bar
+            # Dropping or jumping off
             if (keys[pygame.K_DOWN] or keys[pygame.K_s] or left_stick_y > 0.5 or dpad_y == -1):
-                self.release_monkey_bar(jump=False)  # Just drop down
+                self.release_monkey_bar(jump=False)
             elif (keys[pygame.K_SPACE] or jump_button):
-                self.release_monkey_bar(jump=True)   # Jump off
+                self.release_monkey_bar(jump=True)
             
-            # No gravity when swinging
             self.Yvel = 0
-        
-        if self.homing_attack_active:
+            
+        elif self.homing_attack_active:
             self.perform_homing_attack()
-            self.homing_attack_active = False  # Reset after one frame
-
+            self.homing_attack_active = False
         else:
-            # Regular movement when not swinging
+            # Regular movement
             boost_max_speed = 32
             normal_max_speed = 20
             
-            # Boosting logic - works both on ground and in air
+            # Boosting logic
             if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT] or boost_button > 0.5:
                 self.current_max_speed = boost_max_speed
                 if not self.boosting:
-                    # Only set this when first starting the boost
                     if abs(self.groundSpeed) < boost_max_speed:
-                        # Preserve direction but set to max boost speed
                         direction = 1 if self.groundSpeed >= 0 else -1
                         self.groundSpeed = boost_max_speed * direction
                     self.boosting = True
             else:
-                # When not boosting, gradually return to normal max speed
                 self.current_max_speed = normal_max_speed
                 self.boosting = False
 
-            # Jump logic (adjust for contact mode)
+            # Jump logic
             if (keys[pygame.K_SPACE] or jump_button) and not self.jumped:
                 self.Yvel = -15
                 self.jumped = True
@@ -410,13 +385,12 @@ class Character(pygame.sprite.Sprite):
                     self.jumpSoundPlayed = True
                 self.jumpSoundPlayed = False
 
-            # Apply gravity if not on the ground
+            # Apply gravity when not on ground
             if not self.grounded:
                 # Apply gravity
-                self.Yvel += self.gravityforce  # Increase gravity effect
-                self.Yvel = min(self.Yvel, 15)  # Cap fall speed
+                self.Yvel += self.gravityforce 
                 
-                # Air control - full control for X direction
+                # Air control
                 if keys[pygame.K_LEFT] or keys[pygame.K_a] or left_stick_x < -0.5 or dpad_x == -1:
                     self.direction = 1
                     if self.groundSpeed > 0:
@@ -447,14 +421,14 @@ class Character(pygame.sprite.Sprite):
                         if self.groundSpeed >= self.current_max_speed:
                             self.groundSpeed = self.current_max_speed
                 else:
-                    # Apply air friction (less than ground friction)
+                    # Air friction
                     air_friction = self.friction * 0.5
                     if abs(self.groundSpeed) > air_friction:
                         self.groundSpeed -= air_friction * (self.groundSpeed / abs(self.groundSpeed))
                     else:
                         self.groundSpeed = 0
                 
-                # Transfer ground speed to X velocity for air movement
+                # Transfer ground speed to X velocity
                 self.Xvel = self.groundSpeed
             else:
                 # Ground movement
@@ -496,35 +470,36 @@ class Character(pygame.sprite.Sprite):
                         self.acceleration -= 0.001
                     self.groundSpeed -= min(abs(self.groundSpeed), self.friction) * (self.groundSpeed / abs(self.groundSpeed) if self.groundSpeed != 0 else 0)
                     self.stopping = False
-                    
+                
+                # Handle stopping sound
                 if self.stopping:
                     if not self.stoppingSoundPlayed:
                         pygame.mixer.Sound.play(stoppingSound)
                         self.stoppingSoundPlayed = True
                 else:
                     self.stoppingSoundPlayed = False
+                
+                # Handle movement on angled ground
+                if self.angle != 0:
+                    # Apply slope influence on speed
+                    angle_rad = math.radians(self.angle)
+                    slope_factor = math.sin(angle_rad) * 0.2
                     
-                # Create a movement vector based on ground speed
-                movement_vector = pygame.math.Vector2(self.groundSpeed, 0)
-                movement_vector = movement_vector.rotate(-self.angle)  # Rotate along the slope
+                    # Create a movement vector based on ground speed and angle
+                    movement_vector = pygame.math.Vector2(self.groundSpeed, 0)
+                    movement_vector = movement_vector.rotate(-self.angle)
+                    
+                    self.Xvel = movement_vector.x
+                    self.Yvel = movement_vector.y
+                else:
+                    # Flat ground
+                    self.Xvel = self.groundSpeed
+                    self.Yvel = 0
 
-                self.Xvel = movement_vector.x
-                self.Yvel = movement_vector.y
-
-
-        # Update Sonic's position
-        self.x += self.Xvel
-        self.rect.x = self.x
-        self.y += self.Yvel
-        self.rect.y = self.y
-        self.hitbox.x = ((self.rect.x//2) + 100)
-        self.hitbox.y = (self.rect.y + 50)
-        self.hitbox.center = self.rect.center
-        self.hitbox.bottom = self.rect.bottom
-
-        # Update animation
+        # IMPORTANT: Don't update position here! Only update animation
         self.update_animation()
-        if not self.swinging:  # Only update contact mode when not swinging
+        self.update_sensors()
+        if not self.swinging:
             self.update_contact_mode()
 
     def update_animation(self):

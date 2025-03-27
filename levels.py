@@ -3,7 +3,7 @@ import pygame, os, random, math, pytmx, json
 from characters import Sonic, Tails
 from objects import *
 from constants import *
-from utils import Camera
+from utils import Camera, Mask
 
 pygame.init()
 pygame.mixer.init()
@@ -34,196 +34,214 @@ class Level:
 class Windmill_Isle(Level):
     def __init__(self, character):
         super().__init__()
+        # Load and scale background
         self.background_img = pygame.image.load(os.path.join("assets", "backgrounds", "windmillisle.png")).convert()
         self.background = pygame.transform.scale(self.background_img, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        
+        # Load music for the level
         pygame.mixer_music.load(os.path.join("assets", "music", "windmillisle.mp3"))
+        
+        # Instantiate the character based on name
         if character == "Sonic":
-            self.character = Sonic(100, 1500)
+            self.character = Sonic(100, 100)
         elif character == "Tails":
-            self.character = Tails(100, 1500)
+            self.character = Tails(100, 100)
+            
         self.rings = pygame.sprite.Group()
         self.enemies = pygame.sprite.Group()
-        self.monkey_bars = pygame.sprite.Group()  # New group for monkey bars
+        self.monkey_bars = pygame.sprite.Group()   # Group for monkey bars/triggers
         self.springs = pygame.sprite.Group()
         self.load_enemies()
         self.ring_counter = 0
         self.show_target = False
-        self.tile_group = self.load_tiles()
+        
+        self.collidable_tiles = []
+        self.load_tiles()
 
-        # Determine level size based on tiles
-        level_width = Windmill_Isle_TMX.width * 96  # Tile width * tile size
+        # Determine level size based on Tiled map dimensions
+        level_width = Windmill_Isle_TMX.width * 96  # For instance: tile width * tile size
         level_height = Windmill_Isle_TMX.height * 96
         self.camera = Camera(level_width, level_height)
 
     def load_tiles(self):
-        """Load level tiles while ignoring the 'masks' layer."""
-        tile_group = pygame.sprite.Group()
-
-        for layer in Windmill_Isle_TMX.visible_layers:
-            # Ignore the "masks" layer entirely
-            if isinstance(layer, pytmx.TiledTileLayer) and layer.name not in ["masks", "objects"]:
-                layer_index = Windmill_Isle_TMX.layers.index(layer)
-
-                for x, y, tile_gid in layer.tiles():
-                    tile_x = x * 64
-                    tile_y = y * 64
-
-                    tile_properties = Windmill_Isle_TMX.get_tile_properties(x, y, layer_index)
-                    angle = int(tile_properties.get("angle", 0) if tile_properties else 0)
-
-                    tile_image = Windmill_Isle_TMX.get_tile_image(x, y, layer_index)
-
-                    # Determine if the tile should be collideable
-                    collideable = layer.name not in ["non-collideable", "background"]
-
-                    if tile_image:
-                        # Create a 64x64 surface with transparency
-                        scaled_tile_image = pygame.Surface((64, 64), pygame.SRCALPHA)
-                        scaled_tile_image.blit(pygame.transform.scale(tile_image, (64, 64)), (0, 0))
-
-                        # Remove black background by setting the color key
-                        scaled_tile_image.set_colorkey((0, 0, 0))
-
-                        tile_group.add(Tile(scaled_tile_image, (tile_x, tile_y), angle, collideable=collideable))
-
-        # Process objects separately
-        objects_layer = next((layer for layer in Windmill_Isle_TMX.layers if isinstance(layer, pytmx.TiledTileLayer) and layer.name == "objects"), None)
-
-        if objects_layer:
-            layer_index = Windmill_Isle_TMX.layers.index(objects_layer)
-
-            for x, y, tile_gid in objects_layer.tiles():
-                tile_properties = Windmill_Isle_TMX.get_tile_properties(x, y, layer_index)
-
-                if tile_properties:
-                    tile_x = x * 64
-                    tile_y = y * 64
-
-                    # Handle rings
-                    if tile_properties.get("ring", False):
-                        self.rings.add(Ring(tile_x, tile_y))
-
-                    # Handle springs
-                    if tile_properties.get("spring", False):
-                        angle = int(tile_properties.get("angle", 90))  # Default to 90° (up)
-                        self.springs.add(Spring(tile_x, tile_y, angle))
-
-                    # Handle monkey bars
-                    if tile_properties.get("monkey_bar", False):
-                        tile_image = Windmill_Isle_TMX.get_tile_image(x, y, layer_index)
-                        if tile_image:
-                            scaled_tile_image = pygame.Surface((64, 64), pygame.SRCALPHA)
-                            scaled_tile_image.blit(pygame.transform.scale(tile_image, (64, 64)), (0, 0))
-                            scaled_tile_image.set_colorkey((0, 0, 0))
-
-                            # Create a monkey bar tile
-                            monkey_bar = Tile(scaled_tile_image, (tile_x, tile_y), 0, collideable=True)
-                            monkey_bar.is_monkey_bar = True
-
-                            # Add to both groups for easier management
-                            tile_group.add(monkey_bar)
-                            self.monkey_bars.add(monkey_bar)
-
-        return tile_group
-
-    def handle_tile_collision(self):
-        """Handles Sonic's collision with tiles efficiently using sensors."""
+        """
+        Load tiles directly from all layers, identifying 'Masks F' and 'Surface F' layers.
+        Tiles from 'Masks F' are processed for collision and made renderable,
+        while tiles from 'Surface F' are prepared for visual rendering.
+        """
+        # Debug: Print all layer names
+        print("Available layers:", [layer.name for layer in Windmill_Isle_TMX.layers])
         
-        # If Sonic is already on monkey bars, we handle them differently
-        if self.character.swinging:
-            # Check if Sonic has moved off the monkey bar
-            still_on_bar = False
-            for bar in self.monkey_bars:
-                if pygame.Rect.colliderect(self.character.hitbox, bar.rect):
-                    still_on_bar = True
-                    break
-            
-            if not still_on_bar:
-                # Sonic has moved off the monkey bar - release
-                self.character.release_monkey_bar(jump=False)
-            
-            # Skip regular collision detection while swinging
+        # Find Masks F and Surface F layers by name
+        masks_layer = next(
+            (layer for layer in Windmill_Isle_TMX.layers 
+            if isinstance(layer, pytmx.TiledTileLayer) and layer.name == "Masks F"), 
+            None
+        )
+        
+        surface_layer = next(
+            (layer for layer in Windmill_Isle_TMX.layers 
+            if isinstance(layer, pytmx.TiledTileLayer) and layer.name == "Surface F"), 
+            None
+        )
+        
+        if not masks_layer or not surface_layer:
+            print("Error: Masks F or Surface F layer not found!")
+            # Print out all layer names and types for debugging
+            for layer in Windmill_Isle_TMX.layers:
+                print(f"Layer Name: {layer.name}, Type: {type(layer)}")
             return
         
-        # First check for monkey bars if not swinging
-        # Only check if Sonic is in the air (jumping or falling)
-        if not self.character.grounded:  # Allow grabbing when in air (falling or jumping)
-            for bar in self.monkey_bars:
-                if pygame.Rect.colliderect(self.character.hitbox, bar.rect):
-                    self.character.grab_monkey_bar(bar)
-                    return  # Exit after grabbing
-        
-        # Handle springs
-        for spring in self.springs:
-            # Use rect collision first as a quick check
-            if pygame.Rect.colliderect(self.character.hitbox, spring.rect):
-                    
-                # Check for mask collision
-                if self.character.hitbox.colliderect(spring.rect):
-                    print("Spring activated!") # Debug message
-                    self.character.activate_spring(spring.angle, spring.force)
-                    # **Ensure every spring always plays its sound**
-                    if not spring.sound_played:
-                        if spring.sound_channel:  # If a free channel is found, use it
-                            spring.sound_channel.play(spring.sound)
-                        else:  # If no free channel, fall back to normal play
-                            spring.sound.play()
-                        
-                        spring.sound_played = True  # Prevent repeated triggers
-                    
-                spring.sound_played = False  # Reset sound flag after collision check
-        
-        # Use the new sensor-based collision detection for tiles
-        if self.character.launched:
-            # Skip ground detection when launched
-            return
-        
-        # Get only nearby tiles for performance
-        nearby_tiles = [tile for tile in self.tile_group 
-                        if abs(tile.rect.centerx - self.character.rect.centerx) < 200 
-                        and abs(tile.rect.centery - self.character.rect.centery) < 200]
-        
-        # Reset ground state
-        self.character.grounded = False
-        highest_ground = None
-        
-        # Update character sensors
-        self.character.update_sensors()
-        
-        # Check for collisions with each tile
-        for tile in nearby_tiles:
-            # Skip non-collideable tiles and monkey bars
-            if not getattr(tile, "collideable", True) or getattr(tile, "is_monkey_bar", False):
+                # Process Masks F layer
+        for x, y, tile_gid in masks_layer.tiles():
+            if not tile_gid:  # Skip empty or invalid tiles
                 continue
             
-            # Ensure the tile has a mask for pixel-perfect collision
-            if not hasattr(tile, 'mask'):
-                # Create a mask if it doesn't exist
-                tile.mask = pygame.mask.from_surface(tile.image)
+            tile_x = x * 64
+            tile_y = y * 64
             
-            # Check sensor collision with this tile
-            collision, highest_point = self.character.check_sensor_collision(tile)
-            if collision:
-                # Track the highest ground point (lowest Y value)
-                if highest_ground is None or highest_point < highest_ground:
-                    highest_ground = highest_point
-                    self.character.current_ground_tile = tile
+            # If tile_gid is already the image, use it directly
+            if isinstance(tile_gid, pygame.Surface):
+                mask_tile_image = tile_gid
+            else:
+                # Retrieve the tile image by GID if it's not already a surface
+                mask_tile_image = Windmill_Isle_TMX.get_tile_image_by_gid(tile_gid)
+            
+            if mask_tile_image:
+                # Scale the tile image
+                scaled_mask_image = pygame.transform.scale(mask_tile_image, (64, 64))
+                tile_rect = pygame.Rect(tile_x, tile_y, 64, 64)
+                
+                # Create a mask for collision detection
+                mask_sensor = Mask.surface_to_mask(scaled_mask_image, tile_rect)
+                
+                # Create a renderable mask tile
+                mask_tile = Tile(
+                    scaled_mask_image, 
+                    (tile_x, tile_y), 
+                    collideable=True
+                )
+                
+                # Add mask tile and sensor to collidable tiles
+                self.collidable_tiles.append({
+                    'tile': mask_tile,
+                    'mask': mask_sensor
+                })
+                
+                # Add to tile group to enable rendering if needed
+                self.tile_group.add(mask_tile)
         
-        # Adjust position based on the highest ground found
-        if highest_ground is not None:
-            self.character.adjust_position_to_ground(highest_ground)
+        # Process Surface F layer
+        for x, y, tile_gid in surface_layer.tiles():
+            if tile_gid == 0:  # Skip empty tiles
+                continue
             
-            # Update character properties for grounded state
+            tile_x = x * 64
+            tile_y = y * 64
+            
+            # Get surface tile image
+            surface_tile_image = Windmill_Isle_TMX.get_tile_image_by_gid(tile_gid)
+            
+            if surface_tile_image:
+                # Scale surface tile image
+                scaled_surface_image = pygame.transform.scale(surface_tile_image, (64, 64))
+                tile_rect = pygame.Rect(tile_x, tile_y, 64, 64)
+                
+                # Create surface tile (non-collideable visual tile)
+                surface_tile = Tile(
+                    scaled_surface_image, 
+                    (tile_x, tile_y), 
+                    collideable=False  # Visual tiles do not collide
+                )
+                
+                # Add to tile group for rendering
+                self.tile_group.add(surface_tile)
+        
+    def handle_tile_collision(self):
+        """Stable ground detection with smooth correction for Y-axis only"""
+        # Store previous grounded state
+        was_grounded = self.character.grounded
+        
+        # Reset collision states
+        self.character.grounded = False
+        
+        # Correction settings - configurable based on game feel
+        ground_correction_factor = 0.3  # Lower value = smoother but less responsive
+        max_ground_correction = 5.0     # Maximum pixels to move in a single frame
+        
+        # Track ground contact info
+        ground_corrections = []
+        ground_angles = []
+        
+        # Detect ground collisions - Y axis only
+        for tile_data in self.collidable_tiles:
+            tile = tile_data['tile']
+            tile_mask = tile_data['mask']
+            
+            # Only check tiles that are near the character (optimization)
+            if abs(tile.rect.x - self.character.rect.x) < 300 and abs(tile.rect.y - self.character.rect.y) < 300:
+                # Check both sensors for ground contact
+                for sensor in [self.character.left_sensor, self.character.right_sensor]:
+                    # First check if sensor is in contact with tile at all
+                    if Mask.collide(sensor, tile_mask):
+                        # Then get the precise overlap amount
+                        y_correction = Mask.collide_inside_y_minus(sensor, tile_mask)
+                        
+                        # If there's vertical overlap, record ground contact
+                        if y_correction < 0:
+                            ground_corrections.append(-y_correction)  # Convert to positive (amount to move up)
+                            
+                            # Store angle data for slopes
+                            if hasattr(tile, 'angle'):
+                                ground_angles.append(tile.angle)
+        
+        # Apply ground positioning with smoothing
+        if ground_corrections:
+            # Set grounded state
             self.character.grounded = True
-            self.character.jumped = False
-            if hasattr(self.character.current_ground_tile, 'angle'):
-                self.character.angle = self.character.current_ground_tile.angle
+            
+            # Calculate average ground level from all contacts
+            avg_correction = sum(ground_corrections) / len(ground_corrections)
+            
+            # Apply smoothed correction - prevents jitter
+            smooth_correction = min(avg_correction * ground_correction_factor, max_ground_correction)
+            
+            # Apply correction as floating-point movement - Y AXIS ONLY
+            self.character.y -= smooth_correction
+            # Only update rect after the correction
+            self.character.rect.y = int(self.character.y)
+            
+            # Only zero Y velocity when first landing
+            if not was_grounded:
+                self.character.Yvel = 0
+            
+            # Update slope angle with smooth interpolation
+            if ground_angles:
+                target_angle = sum(ground_angles) / len(ground_angles)
+                angle_factor = 0.2  # Lower = smoother angle transition
+                self.character.angle += (target_angle - self.character.angle) * angle_factor
+        else:
+            # When not on ground, gradually return to 0 angle
+            self.character.angle += (0 - self.character.angle) * 0.1
         
-        if not self.character.grounded:
-            # Reset angle smoothly back to 0 when in air
-            self.character.angle += (0 - self.character.angle) * 0.15
-
-
+        # Update rect position from floating point after all corrections
+        # Note: Only updating Y because we're not doing X-axis corrections
+        self.character.rect.y = int(self.character.y)
+        
+        # Update hitbox position
+        self.character.hitbox.x = ((self.character.rect.x//2) + 100)
+        self.character.hitbox.y = (self.character.rect.y + 50)
+        self.character.hitbox.center = self.character.rect.center
+        self.character.hitbox.bottom = self.character.rect.bottom
+        
+        # Update sensors after all position corrections
+        self.character.update_sensors()
+        
+        # Check if character just landed
+        if not was_grounded and self.character.grounded:
+            # Reset jumping state when landing
+            self.character.jumped = False
+        
     def check_ring_collisions(self):
         current_time = pygame.time.get_ticks()
         """Checks if Sonic collects any rings."""
@@ -240,12 +258,45 @@ class Windmill_Isle(Level):
             sound.play()
             self.last_ring_sound_time = current_time  # Reset sound timer
 
+    def visualize_debug_info(self, screen, camera, character):
+        """
+        Visualizes the character's sensors, chunk hitboxes, and tile hitboxes on the screen.
+
+        Parameters:
+            screen: The Pygame surface to draw on (e.g., the game screen).
+            camera: An instance of the Camera class to handle offset adjustments.
+            character: The character entity whose sensors are being drawn.
+            chunks: A dictionary representing the chunks (e.g., CHUNKSLIST).
+            tile_size: Size of each tile (e.g., 64x64).
+        """
+        debug_sensor_color = (255, 255, 255)  # Red for sensors
+        debug_chunk_color = (0, 255, 0)  # Green for chunk hitboxes
+        debug_tile_color = (0, 0, 255)  # Blue for individual tile hitboxes
+
+        # --- Draw Character Sensors ---
+        sensors = [character.left_sensor, character.right_sensor]
+        for sensor in sensors:
+            # The second element in the sensor list is the shifted rectangle.
+            sensor_rect = sensor[1]
+
+            # Apply camera offset
+            adjusted_sensor_rect = camera.apply_rect(sensor_rect)
+
+            # Draw the sensor rectangle on the screen
+            pygame.draw.rect(screen, debug_sensor_color, adjusted_sensor_rect, 2)  # Width of 2 for debugging
+
     def draw(self, screen):
         screen.blit(self.background, (0, 0))
 
         # Draw tiles using camera offsets
-        for tile in self.tile_group:
-            screen.blit(tile.image, self.camera.apply(tile))
+        for tile_data in self.collidable_tiles:
+            # Access the tile object from the dictionary
+            tile = tile_data['tile']
+
+            # Check if the tile exists (some entries may not include visual tiles)
+            if tile:
+                # Apply the camera offset to the tile's rect and render it
+                screen.blit(tile.image, self.camera.apply(tile.rect))
 
         for spring in self.springs:
             screen.blit(spring.image, self.camera.apply(spring))
@@ -262,27 +313,9 @@ class Windmill_Isle(Level):
 
         # Draw Sonic's hitbox (red)
         pygame.draw.rect(screen, (255, 0, 0), offset_hitbox, 1)
-        
-        # Draw sensors if they exist
-        if hasattr(self.character, 'left_sensor_pos') and hasattr(self.character, 'right_sensor_pos'):
-            # Calculate sensor positions with camera offset
-            left_sensor_rect = pygame.Rect(
-                self.character.left_sensor_pos[0] - self.camera.viewport.x,
-                self.character.left_sensor_pos[1] - self.camera.viewport.y,
-                self.character.sensor_thickness,
-                self.character.left_sensor.get_height()
-            )
-            
-            right_sensor_rect = pygame.Rect(
-                self.character.right_sensor_pos[0] - self.camera.viewport.x,
-                self.character.right_sensor_pos[1] - self.camera.viewport.y,
-                self.character.sensor_thickness,
-                self.character.right_sensor.get_height()
-            )
-            
-            # Draw the sensors
-            pygame.draw.rect(screen, (0, 0, 255), left_sensor_rect)
-            pygame.draw.rect(screen, (0, 0, 255), right_sensor_rect)
+
+        # Visualize debug information
+        self.visualize_debug_info(screen, self.camera, self.character)
         
         # Draw rings
         for ring in self.rings:
@@ -304,46 +337,51 @@ class Windmill_Isle(Level):
             homing_y = target_rect.centery - self.camera.viewport.y - (homing_scaled.get_height() // 2)
             screen.blit(homing_scaled, (homing_x, homing_y))
 
-        # Apply camera to Sonic's position, then draw the debug dot
-        center_x, center_y = self.character.rect.center
-        offset_x, offset_y = self.camera.apply(self.character).topleft  # Get camera offset
-        pygame.draw.circle(screen, (0, 255, 0), (center_x - offset_x, center_y - offset_y), 3)
-
     def load_enemies(self):
         pass
 
     def update(self):
-        # Update Sonic first
+        """Master update method with improved gravity control"""
+        # Calculate velocity but don't apply position changes yet
         self.character.update()
         
-        # Update camera to follow Sonic
+        # CRITICAL FIX: Completely prevent gravity application when grounded
+        # This check happens BEFORE applying position changes
+        if self.character.grounded:
+            # Force vertical velocity to zero while on ground
+            self.character.Yvel = 0
+        
+        # Apply velocity to position
+        self.character.x += self.character.Xvel
+        self.character.rect.x = self.character.x
+        self.character.y += self.character.Yvel
+        self.character.rect.y = self.character.y
+        
+        # Update hitbox and sensors
+        self.character.hitbox.x = ((self.character.rect.x//2) + 100)
+        self.character.hitbox.y = (self.character.rect.y + 50)
+        self.character.hitbox.center = self.character.rect.center
+        self.character.hitbox.bottom = self.character.rect.bottom
+        
+        # Handle tile collisions
+        self.handle_tile_collision()
+        
+        # Update camera
         self.camera.update(self.character)
-
-        # Reset grounded state if not swinging
-        if not self.character.swinging:
-            self.character.grounded = False
         
-        # Optimize collision detection with spatial partitioning
-        # Only check tiles that are close to Sonic
-        camera_rect = pygame.Rect(self.camera.viewport.x, self.camera.viewport.y, SCREEN_WIDTH, SCREEN_HEIGHT)
-        
-        # Expand the check area slightly to catch tiles just outside view
-        check_rect = camera_rect.inflate(128, 128)
-        
-        # Only check tiles within view range
-        visible_tiles = [tile for tile in self.tile_group if check_rect.colliderect(tile.rect)]
-        
-        # Only update rings that are visible on screen
+        # Update other game elements
         for ring in self.rings:
             ring.update()
         
-        # Update enemies only if they're visible
-        visible_enemies = [enemy for enemy in self.enemies if camera_rect.colliderect(enemy.rect)]
+        visible_enemies = [enemy for enemy in self.enemies if 
+                        pygame.Rect(self.camera.viewport.x, self.camera.viewport.y, 
+                                    SCREEN_WIDTH, SCREEN_HEIGHT).colliderect(enemy.rect)]
         for enemy in visible_enemies:
             enemy.update(self.character.rect)
-
-        self.handle_tile_collision()
+        
+        # Check for ring collisions
         self.check_ring_collisions()
+        
+        # Check for homing target when jumping
         if self.character.jumped and not self.character.homing_attack_active and not self.character.homing_target:
-            # Pass the enemy and spring groups to Sonic's find_homing_target method
             self.character.find_homing_target(self.enemies, self.springs)

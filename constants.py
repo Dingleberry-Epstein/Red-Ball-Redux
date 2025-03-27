@@ -40,7 +40,4 @@ RIGHT_WALL = 1
 CEILING = 2
 LEFT_WALL = 3
 
-LOOPMAX = 32
-OUT_SIDE = 256
-
-class_type = list[pygame.Mask, pygame.Rect, pygame.Rect]
+CHUNK_SIZE = 128
