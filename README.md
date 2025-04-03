@@ -1,31 +1,8 @@
-# Sonic-Pygame-Test
-This is a simple attempt at making a working Sonic game using Pygame. I've tried getting angled movement to work but it's actually quite troublesome. The angles do work to some extent but it is incredibly buggy at the moment. Please remember that this is a school project so it will not be the most polished game out there and may be quite short when finished.
+# Red Ball Redux
+This was originally meant to be a Sonic game but since I couldn't figure out the physics behind Sonic, I decided to remake the original Red Ball by Evgeniy Fedoseev using the Pymunk physics package.
 
-# Installation instructions
-***1. Install/update Python***
+Test your skills against the great foe that is PHYSICS! Help the ball reach the end across all five levels, avoiding deadly spikes, giant chasms and sloppy architecture! This game utilises real world physics and the ball HATES it, so you are going to have a difficult time making it through all the levels without hitches along the way. Never fear, the end [of the level ;)] is always near!
 
-Windows and MacOS: Install from this link -- https://www.python.org/downloads/
+Good luck dear player, you're gonna need it!
 
-(**REMEMBER TO CLICK THE "ADD TO PATH" OPTION DURING INSTALL**)
-
-Linux: You most likely have this installed already, but if you don't, or need to update it, you can visit the link above.
-
-***2. Install Pygame***
-
-Windows: (In Command Prompt) "py -m pip install -U pygame --user"
-
-MacOS: (In Terminal) "python3 -m pip install -U pygame --user"
-
-Debian/Ubuntu/Mint: (In Terminal) "sudo apt-get install python3-pygame"
-
-Fedora/Red hat: (In Terminal) "sudo yum install python3-pygame"
-
-OpenSUSE: (In Terminal) "sudo zypper install python3-pygame"
-
-Arch/Manjaro: (In Terminal) "sudo pamac install python-pygame"
-
-***3. Install PyTMX***
-
-Windows: (In Command Prompt) "pip install pytmx"
-
-MacOS/Linux: I completely forgot, but you can check out the official page -- https://pytmx.readthedocs.io/en/latest/
+**NOTE: You will need to have the following packages installed:***

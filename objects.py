@@ -1,10 +1,9 @@
 import pygame, sys, numpy, json, math, configparser, os, pytmx, time
 
 from constants import *
-from utils import Button, LOOPMAX, class_type
 
 # Load TMX file
-Windmill_Isle_TMX = pytmx.load_pygame(os.path.join("assets", "world building", "Tiled Worlds", "sonic test world.tmx"))
+Windmill_Isle_TMX = os.path.join("assets", "world building", "Tiled Worlds", "sonic test world.tmx")
 
 class GameObject(pygame.sprite.Sprite):
     """Base class for all game objects"""

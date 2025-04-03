@@ -1,4 +1,4 @@
-import pygame, os, json
+import pygame, os, pymunk, pymunk.pygame_util, math
 from constants import *
 
 pygame.init()
@@ -213,151 +213,143 @@ class SceneManager:
 			screen.blit(scaled_image, (0, 0))
 			pygame.display.flip()
 			clock.tick(60)
- 
 
+class PhysicsManager:
+    """Physics manager with improved collision detection for switches"""
 
-LOOPMAX = 32
-OUT_SIDE = 256
+    def __init__(self):
+        # Create the Pymunk space
+        self.space = pymunk.Space()
+        self.space.gravity = (0, 980)  # Gravity
 
-class_type = list[pygame.Mask, pygame.Rect, pygame.Rect]
+        # Expanded collision types
+        self.collision_types = {
+            "ball": 1,
+            "ground": 2,
+            "switch": 3
+        }
 
-class Mask:
+        # Ground detection - we'll use a separate collision handler for this
+        self.player_grounded = False
 
-# Copyright (c) 2023-2025 UCSTORM
-# Tous droits réservés.
+        # Set up collision handler for ground detection
+        ground_handler = self.space.add_collision_handler(
+            self.collision_types["ball"], self.collision_types["ground"]
+        )
+        ground_handler.begin = self._on_ground_begin
+        ground_handler.separate = self._on_ground_separate
+        ground_handler.pre_solve = self._on_ground_pre_solve
+        
+        # Set up collision handler for switches
+        switch_handler = self.space.add_collision_handler(
+            self.collision_types["ball"], self.collision_types["switch"]
+        )
+        switch_handler.begin = self._on_switch_begin
+        switch_handler.separate = self._on_switch_separate
 
-	class_type = class_type
-	
-	def clear(sensor1):
-		sensor1[0].clear()
+    def _on_ground_begin(self, arbiter, space, data):
+        """Simple ground detection - just sets a flag"""
+        # Check if contact is more vertical than horizontal
+        n = arbiter.contact_point_set.normal
+        if n.y < -0.7:  # If normal is pointing mostly upward
+            self.player_grounded = True
+        return True  # Always let normal physics handle the collision
 
-	def newSensor(rect, center_point) -> class_type: # rect_to_mask
-		""" INSIDE: MASK, RECT+CENTER_POINT, ORIGINAL_RECT"""
-		mask = pygame.mask.from_surface(pygame.Surface((rect[2], rect[3])))
-		return [mask, pygame.Rect(rect[0]+center_point[0], rect[1]+center_point[1], rect[2], rect[3]), rect]
+    def _on_ground_pre_solve(self, arbiter, space, data):
+        """Keep updating grounded status during continuous contact"""
+        n = arbiter.contact_point_set.normal
+        if n.y < -0.7:  # If normal is pointing mostly upward
+            self.player_grounded = True
+        return True
 
-	def surface_to_mask(surface, rect) -> class_type:
-		mask = pygame.mask.from_surface(surface)
-		return [mask, pygame.Rect(rect[0], rect[1], surface.get_size()[0], surface.get_size()[1]), pygame.Rect(rect[0], rect[1], surface.get_size()[0], surface.get_size()[1])]
+    def _on_ground_separate(self, arbiter, space, data):
+        """Simple ground detection - just clears a flag"""
+        self.player_grounded = False
+        return True  # Always let normal physics handle the collision
+        
+    def _on_switch_begin(self, arbiter, space, data):
+        """Handle collision with switch - no physical collision effect"""
+        return True  # Let physics handle the collision normally
+        
+    def _on_switch_separate(self, arbiter, space, data):
+        """Handle separation from switch"""
+        return True  # Let physics handle the separation normally
 
-	
-	def blit(mask_chunk, coord, sensor) -> class_type:
-		sensor[0].draw(mask_chunk[0],coord)
-		return sensor
+    def is_grounded(self):
+        """Return whether the player is on the ground"""
+        return self.player_grounded
+        
+    def check_collision(self, shape1, shape2):
+        """Check if two shapes are colliding"""
+        # Create a contact set to test collision
+        for s1 in self.space.shapes:
+            if s1 == shape1:
+                for s2 in self.space.shapes:
+                    if s2 == shape2:
+                        return self.space.shape_query(s1, pymunk.Transform.identity)
+        return False
 
-	def collide(sensor1, sensor2):
-		offset = [sensor2[1][0] - sensor1[1][0], sensor2[1][1] - sensor1[1][1]]
-		overlap = sensor1[0].overlap(sensor2[0], offset)
-		if overlap:
-			print("Overlap found at offset:", offset, "Overlap point:", overlap)
-		return overlap
+    def create_box(self, x, y, width, height, friction=0.9, is_static=True, collision_type=None):
+        """Create a box with customizable properties"""
+        body = pymunk.Body(body_type=pymunk.Body.STATIC if is_static else pymunk.Body.DYNAMIC)
+        body.position = (x + width / 2, y + height / 2)
 
-	def colliderect(sensor1, sensor2):
-		return sensor1[1].colliderect(sensor2[1])
-	
-	def sensor_draw(surface, sensor, color):
-		pygame.draw.rect(surface, color, sensor[1])
+        shape = pymunk.Poly.create_box(body, (width, height))
+        shape.elasticity = 0.0
+        shape.friction = friction
+        
+        # Set collision type - use ground by default or specified type
+        if collision_type == "switch":
+            shape.collision_type = self.collision_types["switch"]
+        else:
+            shape.collision_type = self.collision_types["ground"]
 
-	def rotation_sensor(sensor, MODE, center_point):
-		""" POSSIBILITY: 0 ,1, 2, 3"""
-		rect = [0, 0, 0, 0]
-		if MODE == 0: rect = [sensor[2][0], sensor[2][1], sensor[2][2], sensor[2][3]]
-		elif MODE == 1: rect = [sensor[2][1], -(sensor[2][0] + sensor[2][2]), sensor[2][3], sensor[2][2]]
-		elif MODE == 2: rect = [-(sensor[2][0] + sensor[2][2]), -(sensor[2][1] + sensor[2][3]), sensor[2][2], sensor[2][3]]
-		elif MODE == 3: rect = [-(sensor[2][1] + sensor[2][3]), sensor[2][0], sensor[2][3], sensor[2][2]]
+        self.space.add(body, shape)
+        return body, shape
 
-		return Mask.rect_to_mask(rect, center_point)
+    def create_poly(self, vertices, friction=0.9):
+        """Create a static polygon with high friction"""
+        if len(vertices) < 3:
+            print(f"Error: Cannot create polygon with less than 3 vertices")
+            return None, None
 
-	def collide_inside_y(sensor1, sensor2):
-		running = True
-		LOOP = 0
+        body = pymunk.Body(body_type=pymunk.Body.STATIC)
 
-		while running:
-			if sensor1[0].overlap(sensor2[0], [sensor2[1][0] - sensor1[1][0], sensor2[1][1] - (sensor1[1][1]-LOOP)]):
-				LOOP += 1
-			else: running = False
-			if LOOP >= LOOPMAX:
-				running = False
-		return LOOP
+        # Calculate center for body position
+        avg_x = sum(v[0] for v in vertices) / len(vertices)
+        avg_y = sum(v[1] for v in vertices) / len(vertices)
+        body.position = (avg_x, avg_y)
 
-	def collide_outside_y(sensor1, sensor2):
-		running = True
-		LOOP = 0
+        # Convert to local coordinates
+        local_verts = [(v[0] - avg_x, v[1] - avg_y) for v in vertices]
 
-		while running:
-			if not sensor1[0].overlap(sensor2[0], [sensor2[1][0] - sensor1[1][0], sensor2[1][1] - (sensor1[1][1] + LOOP)]):
-				LOOP += 1
-			else:running = False
-			if LOOP >= LOOPMAX: running = False
-		return LOOP
+        shape = pymunk.Poly(body, local_verts)
+        shape.elasticity = 0.0
+        shape.friction = friction
+        shape.collision_type = self.collision_types["ground"]
 
-	def collide_inside_x(sensor1, sensor2):
-		running = True
-		LOOP = 0
+        self.space.add(body, shape)
+        return body, shape
 
-		while running:
-			if sensor1[0].overlap(sensor2[0], [sensor2[1][0] - (sensor1[1][0]-LOOP), sensor2[1][1] - (sensor1[1][1])]):
-				LOOP += 1
-			else: running = False
-			if LOOP >= LOOPMAX:running = False
-		return LOOP
+    def create_segment(self, p1, p2, thickness=1, friction=0.9):
+        """Create a static line segment with high friction"""
+        body = pymunk.Body(body_type=pymunk.Body.STATIC)
+        shape = pymunk.Segment(body, p1, p2, thickness)
+        shape.elasticity = 0.0
+        shape.friction = friction
+        shape.collision_type = self.collision_types["ground"]
 
+        self.space.add(body, shape)
+        return body, shape
 
-	def collide_outside_x(sensor1, sensor2):
-		running = True
-		LOOP = 0
+    def step(self, dt=1 / 60.0):
+        """Update physics simulation"""
+        self.space.step(dt)
 
-		while running:
-			if not sensor1[0].overlap(sensor2[0], [sensor2[1][0] - (sensor1[1][0]+ LOOP), sensor2[1][1] - (sensor1[1][1])]):
-				LOOP += 1
-			else:running = False
-			if LOOP >= LOOPMAX: running = False
-		return LOOP
+    def clear(self):
+        """Remove all physics objects"""
+        for body in list(self.space.bodies):
+            self.space.remove(body)
 
-
-	def collide_inside_y_minus(sensor1, sensor2):
-		running = True
-		LOOP = 0
-
-		while running:
-			if sensor1[0].overlap(sensor2[0], [sensor2[1][0] - sensor1[1][0], sensor2[1][1] - (sensor1[1][1]+LOOP)]):
-				LOOP += 1
-			else: running = False
-			if LOOP >= LOOPMAX:running = False
-		return -LOOP
-
-
-	def collide_outside_y_minus(sensor1, sensor2):
-		running = True
-		LOOP = 0
-
-		while running:
-			if not sensor1[0].overlap(sensor2[0], [sensor2[1][0] - sensor1[1][0], sensor2[1][1] - (sensor1[1][1] - LOOP)]):
-				LOOP += 1
-			else:running = False
-			if LOOP >= LOOPMAX: running = False
-		return -LOOP
-
-
-	def collide_inside_x_minus(sensor1, sensor2):
-		running = True
-		LOOP = 0
-
-		while running:
-			if sensor1[0].overlap(sensor2[0], [sensor2[1][0] - (sensor1[1][0]+LOOP), sensor2[1][1] - (sensor1[1][1])]):
-				LOOP += 1
-			else: running = False
-			if LOOP >= LOOPMAX:running = False
-		return -LOOP
-
-
-	def collide_outside_x_minus(sensor1, sensor2):
-		running = True
-		LOOP = 0
-
-		while running:
-			if not sensor1[0].overlap(sensor2[0], [sensor2[1][0] - (sensor1[1][0]- LOOP), sensor2[1][1] - (sensor1[1][1])]):
-				LOOP += 1
-			else:running = False
-			if LOOP >= LOOPMAX: running = False
-		return -LOOP
+        for shape in list(self.space.shapes):
+            self.space.remove(shape)

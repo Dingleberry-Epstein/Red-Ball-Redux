@@ -1,387 +1,549 @@
-# levels.py - Level class that inherits from a more general Level base class
-import pygame, os, random, math, pytmx, json
-from characters import Sonic, Tails
-from objects import *
+import pygame
+import pymunk
+import pytmx
+import os
 from constants import *
-from utils import Camera, Mask
+from utils import PhysicsManager
+from characters import PurePymunkBall
+from utils import Camera
+import math
 
-pygame.init()
-pygame.mixer.init()
+class PymunkLevel:
+    """Level that loads mask layers on demand, creating and destroying hitboxes completely when switching."""
 
-class Level:
-    """Base class for all game levels"""
-    def __init__(self):
-        self.background = None
-        self.character = None
-        self.camera = None
-        self.tile_group = pygame.sprite.Group()
-        self.ring_sound_queue = []
-        self.ring_sound_delay = 50
-        self.last_ring_sound_time = 0
+    def __init__(self, tmx_map=None):
+        self.physics = PhysicsManager()
+        self.TILE_SIZE = 64
+        self.ball = PurePymunkBall(self.physics, 175, 500)
+        self.camera = Camera(2000, 2000)
         
-    def load_tiles(self):
-        """Load level tiles"""
-        pass
+        # Load background (cache for better performance)
+        try:
+            self.background_img = pygame.image.load(os.path.join("assets", "backgrounds", "windmillisle.png")).convert()
+            self.background = pygame.transform.scale(self.background_img, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        except:
+            self.background = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            self.background.fill((100, 100, 255))
         
-    def draw(self, screen):
-        """Draw level elements"""
-        pass
+        # Physics and visual objects
+        self.static_bodies = []
+        self.static_shapes = []
+        self.visual_tiles = pygame.sprite.Group()
+        self.mask_switch_triggers = []
+        self.switch_used = False
         
-    def update(self):
-        """Update level state"""
-        pass
-
-class Windmill_Isle(Level):
-    def __init__(self, character):
-        super().__init__()
-        # Load and scale background
-        self.background_img = pygame.image.load(os.path.join("assets", "backgrounds", "windmillisle.png")).convert()
-        self.background = pygame.transform.scale(self.background_img, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        # Layer tracking - only one is active at a time
+        self.active_layer = "F"  # Start with F layer active
         
-        # Load music for the level
-        pygame.mixer_music.load(os.path.join("assets", "music", "windmillisle.mp3"))
-        
-        # Instantiate the character based on name
-        if character == "Sonic":
-            self.character = Sonic(100, 100)
-        elif character == "Tails":
-            self.character = Tails(100, 100)
-            
-        self.rings = pygame.sprite.Group()
-        self.enemies = pygame.sprite.Group()
-        self.monkey_bars = pygame.sprite.Group()   # Group for monkey bars/triggers
-        self.springs = pygame.sprite.Group()
-        self.load_enemies()
-        self.ring_counter = 0
-        self.show_target = False
-        
-        self.collidable_tiles = []
-        self.load_tiles()
-
-        # Determine level size based on Tiled map dimensions
-        level_width = Windmill_Isle_TMX.width * 96  # For instance: tile width * tile size
-        level_height = Windmill_Isle_TMX.height * 96
-        self.camera = Camera(level_width, level_height)
-
-    def load_tiles(self):
-        """
-        Load tiles directly from all layers, identifying 'Masks F' and 'Surface F' layers.
-        Tiles from 'Masks F' are processed for collision and made renderable,
-        while tiles from 'Surface F' are prepared for visual rendering.
-        """
-        # Debug: Print all layer names
-        print("Available layers:", [layer.name for layer in Windmill_Isle_TMX.layers])
-        
-        # Find Masks F and Surface F layers by name
-        masks_layer = next(
-            (layer for layer in Windmill_Isle_TMX.layers 
-            if isinstance(layer, pytmx.TiledTileLayer) and layer.name == "Masks F"), 
-            None
-        )
-        
-        surface_layer = next(
-            (layer for layer in Windmill_Isle_TMX.layers 
-            if isinstance(layer, pytmx.TiledTileLayer) and layer.name == "Surface F"), 
-            None
-        )
-        
-        if not masks_layer or not surface_layer:
-            print("Error: Masks F or Surface F layer not found!")
-            # Print out all layer names and types for debugging
-            for layer in Windmill_Isle_TMX.layers:
-                print(f"Layer Name: {layer.name}, Type: {type(layer)}")
-            return
-        
-                # Process Masks F layer
-        for x, y, tile_gid in masks_layer.tiles():
-            if not tile_gid:  # Skip empty or invalid tiles
-                continue
-            
-            tile_x = x * 64
-            tile_y = y * 64
-            
-            # If tile_gid is already the image, use it directly
-            if isinstance(tile_gid, pygame.Surface):
-                mask_tile_image = tile_gid
-            else:
-                # Retrieve the tile image by GID if it's not already a surface
-                mask_tile_image = Windmill_Isle_TMX.get_tile_image_by_gid(tile_gid)
-            
-            if mask_tile_image:
-                # Scale the tile image
-                scaled_mask_image = pygame.transform.scale(mask_tile_image, (64, 64))
-                tile_rect = pygame.Rect(tile_x, tile_y, 64, 64)
-                
-                # Create a mask for collision detection
-                mask_sensor = Mask.surface_to_mask(scaled_mask_image, tile_rect)
-                
-                # Create a renderable mask tile
-                mask_tile = Tile(
-                    scaled_mask_image, 
-                    (tile_x, tile_y), 
-                    collideable=True
-                )
-                
-                # Add mask tile and sensor to collidable tiles
-                self.collidable_tiles.append({
-                    'tile': mask_tile,
-                    'mask': mask_sensor
-                })
-                
-                # Add to tile group to enable rendering if needed
-                self.tile_group.add(mask_tile)
-        
-        # Process Surface F layer
-        for x, y, tile_gid in surface_layer.tiles():
-            if tile_gid == 0:  # Skip empty tiles
-                continue
-            
-            tile_x = x * 64
-            tile_y = y * 64
-            
-            # Get surface tile image
-            surface_tile_image = Windmill_Isle_TMX.get_tile_image_by_gid(tile_gid)
-            
-            if surface_tile_image:
-                # Scale surface tile image
-                scaled_surface_image = pygame.transform.scale(surface_tile_image, (64, 64))
-                tile_rect = pygame.Rect(tile_x, tile_y, 64, 64)
-                
-                # Create surface tile (non-collideable visual tile)
-                surface_tile = Tile(
-                    scaled_surface_image, 
-                    (tile_x, tile_y), 
-                    collideable=False  # Visual tiles do not collide
-                )
-                
-                # Add to tile group for rendering
-                self.tile_group.add(surface_tile)
-        
-    def handle_tile_collision(self):
-        """Stable ground detection with smooth correction for Y-axis only"""
-        # Store previous grounded state
-        was_grounded = self.character.grounded
-        
-        # Reset collision states
-        self.character.grounded = False
-        
-        # Correction settings - configurable based on game feel
-        ground_correction_factor = 0.3  # Lower value = smoother but less responsive
-        max_ground_correction = 5.0     # Maximum pixels to move in a single frame
-        
-        # Track ground contact info
-        ground_corrections = []
-        ground_angles = []
-        
-        # Detect ground collisions - Y axis only
-        for tile_data in self.collidable_tiles:
-            tile = tile_data['tile']
-            tile_mask = tile_data['mask']
-            
-            # Only check tiles that are near the character (optimization)
-            if abs(tile.rect.x - self.character.rect.x) < 300 and abs(tile.rect.y - self.character.rect.y) < 300:
-                # Check both sensors for ground contact
-                for sensor in [self.character.left_sensor, self.character.right_sensor]:
-                    # First check if sensor is in contact with tile at all
-                    if Mask.collide(sensor, tile_mask):
-                        # Then get the precise overlap amount
-                        y_correction = Mask.collide_inside_y_minus(sensor, tile_mask)
-                        
-                        # If there's vertical overlap, record ground contact
-                        if y_correction < 0:
-                            ground_corrections.append(-y_correction)  # Convert to positive (amount to move up)
-                            
-                            # Store angle data for slopes
-                            if hasattr(tile, 'angle'):
-                                ground_angles.append(tile.angle)
-        
-        # Apply ground positioning with smoothing
-        if ground_corrections:
-            # Set grounded state
-            self.character.grounded = True
-            
-            # Calculate average ground level from all contacts
-            avg_correction = sum(ground_corrections) / len(ground_corrections)
-            
-            # Apply smoothed correction - prevents jitter
-            smooth_correction = min(avg_correction * ground_correction_factor, max_ground_correction)
-            
-            # Apply correction as floating-point movement - Y AXIS ONLY
-            self.character.y -= smooth_correction
-            # Only update rect after the correction
-            self.character.rect.y = int(self.character.y)
-            
-            # Only zero Y velocity when first landing
-            if not was_grounded:
-                self.character.Yvel = 0
-            
-            # Update slope angle with smooth interpolation
-            if ground_angles:
-                target_angle = sum(ground_angles) / len(ground_angles)
-                angle_factor = 0.2  # Lower = smoother angle transition
-                self.character.angle += (target_angle - self.character.angle) * angle_factor
+        # Load the level
+        if tmx_map:
+            self.tmx_map = tmx_map
+            self.load_tmx(tmx_map)
         else:
-            # When not on ground, gradually return to 0 angle
-            self.character.angle += (0 - self.character.angle) * 0.1
+            self.create_test_level()
+
+    def create_test_level(self):
+        """Create a simple test level with F and B sections."""
+        # Set level dimensions
+        self.width = 3000
+        self.height = 1000
         
-        # Update rect position from floating point after all corrections
-        # Note: Only updating Y because we're not doing X-axis corrections
-        self.character.rect.y = int(self.character.y)
+        # Update camera bounds
+        self.camera = Camera(self.width, self.height)
         
-        # Update hitbox position
-        self.character.hitbox.x = ((self.character.rect.x//2) + 100)
-        self.character.hitbox.y = (self.character.rect.y + 50)
-        self.character.hitbox.center = self.character.rect.center
-        self.character.hitbox.bottom = self.character.rect.bottom
+        # Create shapes for currently active layer only
+        if self.active_layer == "F":
+            self.create_f_layer_test()
+        else:
+            self.create_b_layer_test()
         
-        # Update sensors after all position corrections
-        self.character.update_sensors()
+        # Create a test switch that's always present
+        body, shape = self.physics.create_box(350, 450, 64, 64, is_static=True, collision_type="switch")
+        shape.collision_type = self.physics.collision_types["switch"]
+        shape.used = False
+        shape.switch_id = 0
+        self.mask_switch_triggers.append(shape)
+        self.static_bodies.append(body)
+        self.static_shapes.append(shape)
         
-        # Check if character just landed
-        if not was_grounded and self.character.grounded:
-            # Reset jumping state when landing
-            self.character.jumped = False
+        # Create visual representations for both layers
+        self.create_test_visuals()
+
+    def create_f_layer_test(self):
+        """Create test level shapes for F layer."""
+        # Ground platform
+        body, shape = self.physics.create_box(-200, 500, 1000, 50)
+        self.static_bodies.append(body)
+        self.static_shapes.append(shape)
+
+        # First slope
+        slope_vertices = [(800, 500), (1000, 400), (1000, 500)]
+        body, shape = self.physics.create_poly(slope_vertices)
+        if body and shape:
+            self.static_bodies.append(body)
+            self.static_shapes.append(shape)
+
+        # Middle platform
+        body, shape = self.physics.create_box(1000, 400, 300, 50)
+        self.static_bodies.append(body)
+        self.static_shapes.append(shape)
+
+        # Second slope
+        slope2_vertices = [(1300, 400), (1500, 550), (1300, 550)]
+        body, shape = self.physics.create_poly(slope2_vertices, friction=0.7)
+        if body and shape:
+            self.static_bodies.append(body)
+            self.static_shapes.append(shape)
+
+        # Bottom platform
+        body, shape = self.physics.create_box(1500, 550, 400, 50)
+        self.static_bodies.append(body)
+        self.static_shapes.append(shape)
+
+        # Loop
+        self.create_loop(2100, 450, 100, 12)  # Reduced segments from 16 to 12 for performance
+
+        # Platform before loop
+        body, shape = self.physics.create_box(1900, 550, 100, 50)
+        self.static_bodies.append(body)
+        self.static_shapes.append(shape)
+
+        # Platform after loop
+        body, shape = self.physics.create_box(2300, 550, 200, 50)
+        self.static_bodies.append(body)
+        self.static_shapes.append(shape)
+
+    def create_b_layer_test(self):
+        """Create test level shapes for B layer."""
+        # Alternative path - higher platforms
+        body, shape = self.physics.create_box(400, 400, 600, 50)
+        self.static_bodies.append(body)
+        self.static_shapes.append(shape)
+
+        # Second platform
+        body, shape = self.physics.create_box(1200, 300, 400, 50)
+        self.static_bodies.append(body)
+        self.static_shapes.append(shape)
         
-    def check_ring_collisions(self):
-        current_time = pygame.time.get_ticks()
-        """Checks if Sonic collects any rings."""
+        # End platform
+        body, shape = self.physics.create_box(1800, 350, 600, 50)
+        self.static_bodies.append(body)
+        self.static_shapes.append(shape)
 
-        for ring in list(self.rings):  # Convert to list to avoid modifying during iteration
-            if pygame.sprite.collide_rect(ring, self.character):
-                self.ring_counter += 1
-                self.rings.remove(ring)  # Remove the ring from the group
-                self.ring_sound_queue.append(ring.sound)  # Add sound to queue
+    def create_test_visuals(self):
+        """Create visual representations for test level."""
+        # F Layer visuals
+        f_ground = pygame.sprite.Sprite()
+        f_ground.image = pygame.Surface((1000, 50))
+        f_ground.image.fill((200, 0, 0))
+        f_ground.rect = pygame.Rect(-200, 500, 1000, 50)
+        f_ground.layer_name = "Masks F"
+        f_ground.visible = (self.active_layer == "F")
+        f_ground.has_collision = True
+        self.visual_tiles.add(f_ground)
+        
+        # Add slope visuals
+        slope1_visual = pygame.Surface((200, 100), pygame.SRCALPHA)
+        pygame.draw.polygon(slope1_visual, (200, 0, 0), [(0, 100), (200, 0), (200, 100)])
+        slope1_sprite = pygame.sprite.Sprite()
+        slope1_sprite.image = slope1_visual
+        slope1_sprite.rect = pygame.Rect(800, 400, 200, 100)
+        slope1_sprite.layer_name = "Masks F"
+        slope1_sprite.visible = (self.active_layer == "F")
+        slope1_sprite.has_collision = True
+        self.visual_tiles.add(slope1_sprite)
+        
+        # B Layer visuals
+        b_platform1 = pygame.sprite.Sprite()
+        b_platform1.image = pygame.Surface((600, 50))
+        b_platform1.image.fill((0, 0, 200))
+        b_platform1.rect = pygame.Rect(400, 400, 600, 50)
+        b_platform1.layer_name = "Masks B"
+        b_platform1.visible = (self.active_layer == "B")
+        b_platform1.has_collision = True
+        self.visual_tiles.add(b_platform1)
+        
+        b_platform2 = pygame.sprite.Sprite()
+        b_platform2.image = pygame.Surface((400, 50))
+        b_platform2.image.fill((0, 0, 200))
+        b_platform2.rect = pygame.Rect(1200, 300, 400, 50)
+        b_platform2.layer_name = "Masks B"
+        b_platform2.visible = (self.active_layer == "B")
+        b_platform2.has_collision = True
+        self.visual_tiles.add(b_platform2)
 
-        # Play ring sounds sequentially to avoid overlap
-        if self.ring_sound_queue and current_time - self.last_ring_sound_time > self.ring_sound_delay:
-            sound = self.ring_sound_queue.pop(0)  # Get first queued sound
-            sound.play()
-            self.last_ring_sound_time = current_time  # Reset sound timer
+    def create_loop(self, center_x, center_y, radius, segments=12):
+        """Create a circular loop with segments (reduced from 16 to 12 segments)."""
+        angle_step = 2 * math.pi / segments
+        points = []
 
-    def visualize_debug_info(self, screen, camera, character):
-        """
-        Visualizes the character's sensors, chunk hitboxes, and tile hitboxes on the screen.
+        # Generate points around the circle
+        for i in range(segments + 1):
+            angle = i * angle_step
+            x = center_x + radius * math.cos(angle)
+            y = center_y + radius * math.sin(angle)
+            points.append((x, y))
 
-        Parameters:
-            screen: The Pygame surface to draw on (e.g., the game screen).
-            camera: An instance of the Camera class to handle offset adjustments.
-            character: The character entity whose sensors are being drawn.
-            chunks: A dictionary representing the chunks (e.g., CHUNKSLIST).
-            tile_size: Size of each tile (e.g., 64x64).
-        """
-        debug_sensor_color = (255, 255, 255)  # Red for sensors
-        debug_chunk_color = (0, 255, 0)  # Green for chunk hitboxes
-        debug_tile_color = (0, 0, 255)  # Blue for individual tile hitboxes
+        # Create segments between the points
+        for i in range(segments):
+            angle = i * angle_step
+            position_factor = math.sin(angle)
+            segment_friction = 0.5 + 0.4 * (position_factor + 1) / 2
+            body, shape = self.physics.create_segment(points[i], points[i + 1], thickness=5, friction=segment_friction)
+            if body and shape:
+                self.static_bodies.append(body)
+                self.static_shapes.append(shape)
 
-        # --- Draw Character Sensors ---
-        sensors = [character.left_sensor, character.right_sensor]
-        for sensor in sensors:
-            # The second element in the sensor list is the shifted rectangle.
-            sensor_rect = sensor[1]
+    def load_tmx(self, tmx_map):
+        """Load a level from a TMX file, loading only the active mask layer."""
+        self.tmx_data = pytmx.load_pygame(tmx_map)
+        self.width = self.tmx_data.width * self.TILE_SIZE
+        self.height = self.tmx_data.height * self.TILE_SIZE
+        self.camera = Camera(self.width, self.height)
+        
+        # Clear any existing physics objects
+        self.clear_physics_objects()
+        
+        # Load all visual tiles first - both Surface F, Surface B, Masks F, Masks B
+        self.load_visual_tiles()
+        
+        # Load only the active layer's collision shapes
+        if self.active_layer == "F":
+            self.load_collision_layer("Masks F")
+        else:
+            self.load_collision_layer("Masks B")
+        
+        # Process triggers (always present regardless of active layer)
+        self.load_triggers()
 
-            # Apply camera offset
-            adjusted_sensor_rect = camera.apply_rect(sensor_rect)
+    def clear_physics_objects(self):
+        """Clear all physics objects from space and memory."""
+        # Remove from physics space
+        for shape in self.static_shapes:
+            try:
+                self.physics.space.remove(shape)
+            except:
+                pass
+                
+        for body in self.static_bodies:
+            try:
+                self.physics.space.remove(body)
+            except:
+                pass
+        
+        # Clear all lists
+        self.static_bodies = []
+        self.static_shapes = []
+        self.mask_switch_triggers = []
 
-            # Draw the sensor rectangle on the screen
-            pygame.draw.rect(screen, debug_sensor_color, adjusted_sensor_rect, 2)  # Width of 2 for debugging
+    def load_visual_tiles(self):
+        """Load visual tiles for all layers - Surface F, Surface B, Masks F, Masks B."""
+        # Clear existing visual tiles
+        self.visual_tiles.empty()
+        
+        # Cache for better performance
+        visible_layers = []
+        for layer in self.tmx_data.visible_layers:
+            if isinstance(layer, pytmx.TiledTileLayer):
+                visible_layers.append(layer)
+        
+        # Process all layers
+        for layer in visible_layers:
+            layer_name = layer.name if hasattr(layer, 'name') else "Unnamed"
+            
+            # Set visibility based on active layer for mask layers
+            is_visible = True
+            if layer_name == "Masks F":
+                is_visible = (self.active_layer == "F")
+            elif layer_name == "Masks B":
+                is_visible = (self.active_layer == "B")
+            
+            # Process tiles in batches for better performance
+            tiles_to_add = []
+            
+            for x, y, gid in layer.tiles():
+                if gid:
+                    world_x = x * self.TILE_SIZE
+                    world_y = y * self.TILE_SIZE
+                    
+                    # Get tile image
+                    tile_image = gid
+                    if not tile_image:
+                        tile_image = pygame.Surface((self.TILE_SIZE, self.TILE_SIZE))
+                        tile_image.fill((255, 0, 0))
+                    
+                    # Create visual tile
+                    visual_tile = pygame.sprite.Sprite()
+                    visual_tile.image = pygame.transform.scale(tile_image, (self.TILE_SIZE, self.TILE_SIZE))
+                    visual_tile.rect = pygame.Rect(world_x, world_y, self.TILE_SIZE, self.TILE_SIZE)
+                    visual_tile.has_collision = (layer_name == "Masks F" or layer_name == "Masks B")
+                    visual_tile.layer_name = layer_name
+                    visual_tile.visible = is_visible
+                    
+                    tiles_to_add.append(visual_tile)
+            
+            # Add tiles in a batch
+            self.visual_tiles.add(tiles_to_add)
+
+    def load_collision_layer(self, layer_name):
+        """Load collision shapes for a specific layer using masks for precise shapes."""
+        processed_tiles = set()
+        
+        # Cache layers for better performance
+        collision_layers = []
+        for layer in self.tmx_data.visible_layers:
+            if isinstance(layer, pytmx.TiledTileLayer) and layer.name == layer_name:
+                collision_layers.append(layer)
+        
+        for layer in collision_layers:
+            for x, y, gid in layer.tiles():
+                if gid:
+                    world_x = x * self.TILE_SIZE
+                    world_y = y * self.TILE_SIZE
+                    tile_key = (world_x, world_y)
+                    
+                    # Skip if already processed
+                    if tile_key in processed_tiles:
+                        continue
+                    processed_tiles.add(tile_key)
+                    
+                    # Get tile properties
+                    properties = self.tmx_data.get_tile_properties_by_gid(gid) or {}
+                    shape_type = self.get_shape_type(properties)
+                    angle = properties.get('angle', 0)
+                    friction = self.get_friction_for_shape(shape_type, angle)
+                    
+                    # Create collision shape based on type
+                    if shape_type == "slope":
+                        vertices = self.get_slope_vertices(world_x, world_y, self.TILE_SIZE, self.TILE_SIZE, angle)
+                        if len(vertices) >= 3:
+                            body, shape = self.physics.create_poly(vertices, friction=friction)
+                            if body and shape:
+                                self.static_bodies.append(body)
+                                self.static_shapes.append(shape)
+                    else:
+                        # Try to create from mask first - important for precise collision detection
+                        tile_image = gid
+                        success = False
+                        if tile_image:
+                            success = self.create_body_from_mask(tile_image, world_x, world_y, friction)
+                        
+                        # Fall back to box if needed
+                        if not success:
+                            body, shape = self.physics.create_box(world_x, world_y, self.TILE_SIZE, self.TILE_SIZE, friction=friction)
+                            if body and shape:
+                                self.static_bodies.append(body)
+                                self.static_shapes.append(shape)
+
+    def load_triggers(self):
+        """Load trigger objects from the Invis Objects layer."""
+        for layer in self.tmx_data.visible_layers:
+            if isinstance(layer, pytmx.TiledObjectGroup) and layer.name == "Invis Objects":
+                for i, obj in enumerate(layer):
+                    if hasattr(obj, 'name') and obj.name == "Loop Switch":
+                        # Create switch
+                        body, shape = self.physics.create_box(
+                            obj.x, obj.y, obj.width, obj.height, 
+                            is_static=True, 
+                            collision_type="switch"
+                        )
+                        
+                        if body and shape:
+                            shape.used = False
+                            shape.switch_id = i
+                            shape.collision_type = self.physics.collision_types["switch"]
+                            
+                            self.mask_switch_triggers.append(shape)
+                            self.static_bodies.append(body)
+                            self.static_shapes.append(shape)
+
+    def switch_layer(self):
+        """Switch between F and B layers, completely removing old shapes and creating new ones."""
+        # Update active layer
+        new_layer = "B" if self.active_layer == "F" else "F"
+        self.active_layer = new_layer
+        
+        # Store switches to preserve them
+        switches = []
+        switch_bodies = []
+        for i, shape in enumerate(self.static_shapes):
+            if hasattr(shape, 'collision_type') and shape.collision_type == self.physics.collision_types["switch"]:
+                switches.append(shape)
+                switch_bodies.append(self.static_bodies[i])
+        
+        # Clear all physics objects
+        self.clear_physics_objects()
+        
+        # Restore switches
+        self.static_shapes.extend(switches)
+        self.static_bodies.extend(switch_bodies)
+        self.mask_switch_triggers = switches
+        
+        # Create shapes for new active layer
+        if hasattr(self, 'tmx_data'):
+            # If we have TMX data, load from the map
+            self.load_collision_layer(f"Masks {self.active_layer}")
+        else:
+            # Otherwise we're in a test level
+            if self.active_layer == "F":
+                self.create_f_layer_test()
+            else:
+                self.create_b_layer_test()
+        
+        # Update visuals
+        self.update_visuals()
+
+    def update_visuals(self):
+        """Update visibility of visual tiles based on active layer."""
+        for tile in self.visual_tiles:
+            if tile.layer_name == "Masks F":
+                tile.visible = (self.active_layer == "F")
+            elif tile.layer_name == "Masks B":
+                tile.visible = (self.active_layer == "B")
+
+    def handle_events(self, event):
+        """Handle keyboard input for layer switching."""
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_l:
+                self.switch_layer()
+                return True  # Event handled
+        return False
+
+    def update(self, dt=1/60.0):
+        """Update level state."""
+        self.ball.update()
+        self.physics.step(dt)
+        self.camera.update(self.ball)
+        
+        # Handle switch collisions
+        for trigger in self.mask_switch_triggers:
+            # Detect collision with the ball
+            is_colliding = self.physics.check_collision(self.ball.shape, trigger)
+            
+            if is_colliding and not trigger.used:
+                # Activate switch
+                trigger.used = True
+                # Switch layers
+                self.switch_layer()
+            elif not is_colliding and trigger.used:
+                # Reset switch
+                trigger.used = False
 
     def draw(self, screen):
+        """Draw level with visibility controls."""
+        # Draw background
         screen.blit(self.background, (0, 0))
-
-        # Draw tiles using camera offsets
-        for tile_data in self.collidable_tiles:
-            # Access the tile object from the dictionary
-            tile = tile_data['tile']
-
-            # Check if the tile exists (some entries may not include visual tiles)
-            if tile:
-                # Apply the camera offset to the tile's rect and render it
-                screen.blit(tile.image, self.camera.apply(tile.rect))
-
-        for spring in self.springs:
-            screen.blit(spring.image, self.camera.apply(spring))
-
-        # Draw Sonic
-        screen.blit(self.character.image, self.camera.apply(self.character))
         
-        # Draw hitboxes for debugging
-        offset_hitbox = self.camera.apply_rect(self.character.hitbox)
-        offset_rect = self.camera.apply_rect(self.character.rect)
+        # Get visible tiles within viewport
+        viewport_rect = self.camera.viewport
+        
+        # Optimization: Only process visible tiles
+        visible_tiles = []
+        for tile in self.visual_tiles:
+            if tile.visible and tile.rect.colliderect(viewport_rect):
+                visible_tiles.append(tile)
+        
+        # Sort tiles by layer - optimization: pre-define layer order
+        layer_order = {"Surface B": 0, "Masks B": 1, "Masks F": 2, "Surface F": 3}
+        visible_tiles.sort(key=lambda t: layer_order.get(getattr(t, 'layer_name', ''), 0))
+        
+        # Draw visible tiles
+        for tile in visible_tiles:
+            screen.blit(tile.image, self.camera.apply(tile))
+        
+        # Draw the player ball
+        screen.blit(self.ball.image, self.camera.apply(self.ball))
+        
+        # Layer info with minimal text rendering
+        font = pygame.font.SysFont(None, 24)
+        layer_text = font.render(f"Active Layer: {self.active_layer} (Press L to switch)", True, (255, 255, 255))
+        screen.blit(layer_text, (10, 10))
 
-        # Draw Sonic's bounding box (green)
-        pygame.draw.rect(screen, (0, 255, 0), offset_rect, 1)
+    def create_body_from_mask(self, surface, x, y, friction=0.8, threshold=128):
+        """Create a polygon shape from a surface mask - crucial for precise slopes."""
+        try:
+            if surface is None:
+                return False
+                
+            scaled_surface = pygame.transform.scale(surface, (self.TILE_SIZE, self.TILE_SIZE))
+            mask = pygame.mask.from_surface(scaled_surface)
+            outline = mask.outline()
+            if len(outline) < 3:
+                return False
+            simplified_outline = self.simplify_polygon(outline, tolerance=2)
+            vertices = [(x + point[0], y + point[1]) for point in simplified_outline]
+            if len(vertices) >= 3:
+                body, shape = self.physics.create_poly(vertices, friction=friction)
+                if body and shape:
+                    self.static_bodies.append(body)
+                    self.static_shapes.append(shape)
+                    return True
+        except Exception as e:
+            pass
+        return False
 
-        # Draw Sonic's hitbox (red)
-        pygame.draw.rect(screen, (255, 0, 0), offset_hitbox, 1)
+    def simplify_polygon(self, points, tolerance=2):
+        """Simplify a polygon."""
+        if len(points) <= 3:
+            return points
+        result = [points[0]]
+        for i in range(1, len(points)):
+            last = result[-1]
+            current = points[i]
+            # Use squared distance to avoid square root calculation
+            squared_dist = (current[0] - last[0])**2 + (current[1] - last[1])**2
+            if squared_dist >= tolerance**2:
+                result.append(current)
+        if len(result) < 3:
+            return points
+        return result
 
-        # Visualize debug information
-        self.visualize_debug_info(screen, self.camera, self.character)
-        
-        # Draw rings
-        for ring in self.rings:
-            screen.blit(ring.image, self.camera.apply(ring))
+    def get_shape_type(self, properties):
+        """Determine shape type."""
+        if not properties:
+            return "box"
+        shape_props = ["shape_type", "shape", "type"]
+        for prop in shape_props:
+            if prop in properties:
+                value = str(properties[prop]).lower()
+                if value in ["slope", "triangle", "ramp"]:
+                    return "slope"
+                if value in ["loop", "circle"]:
+                    return "loop"
+        if "angle" in properties and properties["angle"] != 0:
+            return "slope"
+        return "mask"
 
-        # Draw enemies
-        for enemy in self.enemies:
-            screen.blit(enemy.image, self.camera.apply(enemy))
+    def get_friction_for_shape(self, shape_type, angle):
+        """Determine friction based on shape and angle."""
+        if shape_type == "slope":
+            angle_abs = abs(angle) % 360
+            if angle_abs > 180:
+                angle_abs = 360 - angle_abs
+            if angle_abs > 90:
+                angle_abs = 180 - angle_abs
+            return 0.8 - (angle_abs / 90.0) * 0.3
+        elif shape_type == "loop":
+            return 0.6
+        else:
+            return 0.8
 
-        # Display ring counter
-        ring_counter_display = RingFont.render("RINGS: " + str(self.ring_counter), True, (255, 255, 255))
-        screen.blit(ring_counter_display, (0, 0))
-
-        # Draw homing target indicator
-        if self.character.homing_target and not self.character.homing_attack_active:
-            target_rect = self.character.homing_target.rect
-            homing_scaled = pygame.transform.smoothscale(homing_image, (target_rect.width, target_rect.height))
-            homing_x = target_rect.centerx - self.camera.viewport.x - (homing_scaled.get_width() // 2)
-            homing_y = target_rect.centery - self.camera.viewport.y - (homing_scaled.get_height() // 2)
-            screen.blit(homing_scaled, (homing_x, homing_y))
-
-    def load_enemies(self):
-        pass
-
-    def update(self):
-        """Master update method with improved gravity control"""
-        # Calculate velocity but don't apply position changes yet
-        self.character.update()
-        
-        # CRITICAL FIX: Completely prevent gravity application when grounded
-        # This check happens BEFORE applying position changes
-        if self.character.grounded:
-            # Force vertical velocity to zero while on ground
-            self.character.Yvel = 0
-        
-        # Apply velocity to position
-        self.character.x += self.character.Xvel
-        self.character.rect.x = self.character.x
-        self.character.y += self.character.Yvel
-        self.character.rect.y = self.character.y
-        
-        # Update hitbox and sensors
-        self.character.hitbox.x = ((self.character.rect.x//2) + 100)
-        self.character.hitbox.y = (self.character.rect.y + 50)
-        self.character.hitbox.center = self.character.rect.center
-        self.character.hitbox.bottom = self.character.rect.bottom
-        
-        # Handle tile collisions
-        self.handle_tile_collision()
-        
-        # Update camera
-        self.camera.update(self.character)
-        
-        # Update other game elements
-        for ring in self.rings:
-            ring.update()
-        
-        visible_enemies = [enemy for enemy in self.enemies if 
-                        pygame.Rect(self.camera.viewport.x, self.camera.viewport.y, 
-                                    SCREEN_WIDTH, SCREEN_HEIGHT).colliderect(enemy.rect)]
-        for enemy in visible_enemies:
-            enemy.update(self.character.rect)
-        
-        # Check for ring collisions
-        self.check_ring_collisions()
-        
-        # Check for homing target when jumping
-        if self.character.jumped and not self.character.homing_attack_active and not self.character.homing_target:
-            self.character.find_homing_target(self.enemies, self.springs)
+    def get_slope_vertices(self, x, y, width, height, angle):
+        """Get slope vertices."""
+        if angle == 45:
+            return [(x, y + height), (x + width, y + height), (x + width, y)]
+        elif angle == -45 or angle == 315:
+            return [(x, y), (x, y + height), (x + width, y + height)]
+        elif angle == 30:
+            return [(x, y + height), (x + width, y + height), (x + width, y + height // 2)]
+        elif angle == -30 or angle == 330:
+            return [(x, y + height // 2), (x, y + height), (x + width, y + height)]
+        angle = angle % 360
+        if 0 < angle < 90:
+            h = height * (angle / 90)
+            return [(x, y + height), (x + width, y + height), (x + width, y + height - h)]
+        elif 270 < angle < 360:
+            pos_angle = 360 - angle
+            h = height * (pos_angle / 90)
+            return [(x, y + height - h), (x, y + height), (x + width, y + height)]
+        return [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
