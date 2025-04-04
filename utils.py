@@ -1,4 +1,4 @@
-import pygame, os, pymunk, pymunk.pygame_util, math
+import pygame, os, pymunk
 from constants import *
 
 pygame.init()
@@ -149,70 +149,200 @@ class Button:
 			
 		return False
 
-
 class SceneManager:
-	# Handles scene transitions and effects
-	@staticmethod
-	def fade_in(screen, image, duration, background_color=(255, 255, 255)):
-		# Fade in a scene on the screen
-		"""
-		Args:
-			screen (pygame.Surface): The screen surface
-			image (pygame.Surface): Image to fade in
-			duration (float): Duration in seconds
-			background_color (tuple): RGB background color
-		"""
-		clock = pygame.time.Clock()
-		alpha = 0
-		
-		# Scale image to fit screen
-		scaled_image = pygame.transform.smoothscale(image, (screen.get_width(), screen.get_height()))
-		
-		# Calculate alpha increment per frame (60 FPS)
-		alpha_increment = 255 / (duration * 60)
-		
-		# Fill background
-		screen.fill(background_color)
-		pygame.display.flip()
-		
-		# Fade in loop
-		while alpha < 255:
-			alpha += alpha_increment
-			scaled_image.set_alpha(int(alpha))
-			screen.fill(background_color)
-			screen.blit(scaled_image, (0, 0))
-			pygame.display.flip()
-			clock.tick(60)
+    """Handles scene transitions and effects with improved fade functionality."""
 
-	@staticmethod
-	def fade_out(screen, image, duration, background_color=(1, 1, 1)):
-		# Fade out a scene from the screen
-		"""
-		Args:
-			screen (pygame.Surface): The screen surface
-			image (pygame.Surface): Image to fade out
-			duration (float): Duration in seconds
-			background_color (tuple): RGB background color
-		"""
-		clock = pygame.time.Clock()
-		start_time = pygame.time.get_ticks()
-		
-		# Scale image to fit screen
-		scaled_image = pygame.transform.smoothscale(image, (screen.get_width(), screen.get_height()))
-		
-		# Fade out loop
-		while pygame.time.get_ticks() - start_time < duration * 1000:
-			# Calculate alpha based on elapsed time
-			elapsed = pygame.time.get_ticks() - start_time
-			alpha = int(elapsed / (duration * 2.5))
-			alpha = max(0, min(255, alpha))
-			
-			# Apply alpha and draw
-			scaled_image.set_alpha(255 - alpha)
-			screen.fill(background_color)
-			screen.blit(scaled_image, (0, 0))
-			pygame.display.flip()
-			clock.tick(60)
+    @staticmethod
+    def fade_in(screen, render_func, image=None, duration=1.0, background_color=(0, 0, 0)):
+        """Fade in a scene on the screen, optionally with an image."""
+        clock = pygame.time.Clock()
+        alpha = 0
+
+        # Prepare image if provided
+        scaled_image = None  # Initialize to None
+        image_rect = None  # Initialize to None
+
+        if image is not None and hasattr(image, 'get_width') and hasattr(image, 'get_height'):
+            # Scale down if too large
+            if image.get_width() > 800 or image.get_height() > 600:
+                scale_factor = 3
+                scaled_image = pygame.transform.smoothscale(image, (image.get_width() // scale_factor, image.get_height() // scale_factor))
+            else:
+                scaled_image = image
+
+            image_rect = scaled_image.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2))
+
+        # Calculate alpha increment per frame (60 FPS)
+        alpha_increment = 255 / (duration * 60)
+
+        # Fade in loop
+        skip_fade = False
+        while alpha < 255 and not skip_fade:
+            alpha += alpha_increment
+            if alpha > 255:
+                alpha = 255
+
+            # Render the scene
+            screen.fill(background_color)
+            render_func()
+
+            # Apply fade
+            fade_surface = pygame.Surface((screen.get_width(), screen.get_height()))
+            fade_surface.fill(background_color)
+            fade_surface.set_alpha(int(255 - alpha))  # Reverse alpha for fade-in
+            screen.blit(fade_surface, (0, 0))
+
+            # Draw image if provided
+            if scaled_image is not None and image_rect is not None:
+                temp_image = scaled_image.copy()
+                temp_image.set_alpha(int(alpha))
+                screen.blit(temp_image, image_rect)
+
+            pygame.display.flip()
+            clock.tick(60)
+
+            # Check for key press to skip
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return False
+                if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                    skip_fade = True
+
+        # Ensure final frame is drawn
+        screen.fill(background_color)
+        render_func()
+        if scaled_image is not None and image_rect is not None:
+            screen.blit(scaled_image, image_rect)
+        pygame.display.flip()
+        return True
+
+    @staticmethod
+    def fade_out(screen, render_func, image=None, duration=1.0, background_color=(0, 0, 0)):
+        """Fade out a scene from the screen, optionally with an image."""
+        clock = pygame.time.Clock()
+        alpha = 255
+
+        # Prepare image if provided
+        scaled_image = None  # Initialize to None
+        image_rect = None  # Initialize to None
+
+        if image is not None and hasattr(image, 'get_width') and hasattr(image, 'get_height'):
+            # Scale down if too large
+            if image.get_width() > 800 or image.get_height() > 600:
+                scale_factor = 3
+                scaled_image = pygame.transform.smoothscale(image, (image.get_width() // scale_factor, image.get_height() // scale_factor))
+            else:
+                scaled_image = image
+
+            image_rect = scaled_image.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2))
+
+        # Calculate alpha decrement per frame (60 FPS)
+        alpha_decrement = 255 / (duration * 60)
+
+        # Fade out loop
+        skip_fade = False
+        while alpha > 0 and not skip_fade:
+            alpha -= alpha_decrement
+            if alpha < 0:
+                alpha = 0
+
+            # Render the scene
+            screen.fill(background_color)
+            render_func()
+
+            # Apply fade
+            fade_surface = pygame.Surface((screen.get_width(), screen.get_height()))
+            fade_surface.fill(background_color)
+            fade_surface.set_alpha(int(255 - alpha))
+            screen.blit(fade_surface, (0, 0))
+
+            # Draw image if provided
+            if scaled_image is not None and image_rect is not None:
+                temp_image = scaled_image.copy()
+                temp_image.set_alpha(int(alpha))
+                screen.blit(temp_image, image_rect)
+
+            pygame.display.flip()
+            clock.tick(60)
+
+            # Check for key press to skip
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return False
+                if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                    skip_fade = True
+
+        # Ensure final frame is drawn
+        screen.fill(background_color)
+        render_func()
+        pygame.display.flip()
+        return True
+
+    @staticmethod
+    def fade_to_black(screen, render_func, duration=1.0):
+        """Generic fade to black transition that works without a specific image."""
+        fade_surface = pygame.Surface((screen.get_width(), screen.get_height()))
+        fade_surface.fill((0, 0, 0))
+        clock = pygame.time.Clock()
+
+        skip_fade = False
+        for alpha in range(0, 256, 4):  # Use step of 4 for smooth fade
+            if skip_fade:
+                break
+
+            # Render the content that should be visible
+            render_func()
+
+            # Apply fading overlay
+            fade_surface.set_alpha(alpha)
+            screen.blit(fade_surface, (0, 0))
+            pygame.display.flip()
+            clock.tick(60)
+
+            # Check for key press to skip
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return False
+                if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                    skip_fade = True
+
+        # Ensure we end with a black screen
+        screen.fill((0, 0, 0))
+        pygame.display.flip()
+        return True
+
+    @staticmethod
+    def fade_from_black(screen, render_func, duration=1.0):
+        """Generic fade from black that accepts a rendering function."""
+        fade_surface = pygame.Surface((screen.get_width(), screen.get_height()))
+        fade_surface.fill((0, 0, 0))
+        clock = pygame.time.Clock()
+
+        skip_fade = False
+        for alpha in range(255, -1, -4):  # Use step of 4 for smooth fade
+            if skip_fade:
+                break
+
+            # Render the content that should be visible
+            render_func()
+
+            # Apply fading overlay
+            fade_surface.set_alpha(alpha)
+            screen.blit(fade_surface, (0, 0))
+            pygame.display.flip()
+            clock.tick(60)
+
+            # Check for key press to skip
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    return False
+                if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                    skip_fade = True
+
+        # Ensure we render one final frame without the fade
+        render_func()
+        pygame.display.flip()
+        return True
 
 class PhysicsManager:
     """Physics manager with improved collision detection for switches"""
@@ -353,3 +483,121 @@ class PhysicsManager:
 
         for shape in list(self.space.shapes):
             self.space.remove(shape)
+
+class ParallaxBackground:
+    """Class that manages multiple background layers with parallax effect"""
+    
+    def __init__(self, screen_width, screen_height):
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        self.layers = []  # Will store background layer information
+        
+    def add_layer(self, image_path, parallax_factor):
+        """Add a background layer with a specific parallax factor
+        
+        Args:
+            image_path: Path to the background image
+            parallax_factor: Float between 0 and 1, where:
+                             0 = stationary
+                             1 = moves at the same speed as the camera
+                             Values in between create the parallax effect
+        """
+        try:
+            # Load and prepare the image
+            image = pygame.image.load(image_path).convert_alpha()
+            
+            # Scale the image to be slightly larger than the screen to allow movement
+            scale_factor = max(
+                self.screen_width * 2 / image.get_width(),
+                self.screen_height * 3 / image.get_height()
+            )
+            
+            scaled_width = int(image.get_width() * scale_factor)
+            scaled_height = int(image.get_height() * scale_factor)
+            
+            scaled_image = pygame.transform.scale(image, (scaled_width, scaled_height))
+            
+            # Add to layers list
+            self.layers.append({
+                'image': scaled_image,
+                'factor': parallax_factor,
+                'width': scaled_width,
+                'height': scaled_height,
+                'pos_x': 0,
+                'pos_y': 0
+            })
+            
+            return True
+        except Exception as e:
+            print(f"Error loading background layer: {e}")
+            return False
+    
+    def add_color_layer(self, color, parallax_factor=0.0):
+        """Add a solid color background layer
+        
+        Args:
+            color: RGB tuple for the background color
+            parallax_factor: Usually 0 for static background
+        """
+        # Create a solid color surface
+        surface = pygame.Surface((self.screen_width, self.screen_height))
+        surface.fill(color)
+        
+        # Add to layers list
+        self.layers.append({
+            'image': surface,
+            'factor': parallax_factor,
+            'width': self.screen_width,
+            'height': self.screen_height,
+            'pos_x': 0,
+            'pos_y': 0
+        })
+        
+        return True
+            
+    def update(self, camera_x, camera_y):
+        """Update the position of all background layers based on camera position
+        
+        Args:
+            camera_x: The x-coordinate of the camera in world space
+            camera_y: The y-coordinate of the camera in world space
+        """
+        for layer in self.layers:
+            # Calculate how much this layer should move based on its parallax factor
+            # Invert the movement to create parallax effect (background moves opposite to camera)
+            layer['pos_x'] = -camera_x * layer['factor']
+            layer['pos_y'] = -camera_y * layer['factor']
+            
+            # If the layer is larger than the screen, we need to wrap it
+            if layer['width'] > self.screen_width or layer['height'] > self.screen_height:
+                # Keep the background position within the dimensions of the image
+                # for proper wrapping (only needed for layers that need to tile)
+                layer['pos_x'] = layer['pos_x'] % layer['width']
+                layer['pos_y'] = layer['pos_y'] % layer['height']
+            
+    def draw(self, screen):
+        """Draw all background layers to the screen
+        
+        Args:
+            screen: Pygame surface to draw on
+        """
+        for layer in self.layers:
+            # For a static full-screen color layer
+            if layer['width'] == self.screen_width and layer['height'] == self.screen_height:
+                screen.blit(layer['image'], (0, 0))
+                continue
+                
+            # For layers that need to tile to cover the screen
+            pos_x = int(layer['pos_x'])
+            pos_y = int(layer['pos_y'])
+            
+            # Calculate how many tiles we need in each direction
+            tiles_x = (self.screen_width // layer['width']) + 2
+            tiles_y = (self.screen_height // layer['height']) + 2
+            
+            # Draw the tiles
+            for i in range(-1, tiles_x):
+                for j in range(-1, tiles_y):
+                    x = pos_x + (i * layer['width'])
+                    y = pos_y + (j * layer['height'])
+                    screen.blit(layer['image'], (x, y))

@@ -2,8 +2,10 @@ import pygame
 import pymunk
 import pytmx
 import os
+import sys
+import time
 from constants import *
-from utils import PhysicsManager
+from utils import PhysicsManager, ParallaxBackground
 from characters import PurePymunkBall
 from utils import Camera
 import math
@@ -14,23 +16,44 @@ class PymunkLevel:
     def __init__(self, tmx_map=None):
         self.physics = PhysicsManager()
         self.TILE_SIZE = 64
-        self.ball = PurePymunkBall(self.physics, 175, 500)
+        self.ball = PurePymunkBall(self.physics, 178, 1800)
         self.camera = Camera(2000, 2000)
         
-        # Load background (cache for better performance)
-        try:
-            self.background_img = pygame.image.load(os.path.join("assets", "backgrounds", "windmillisle.png")).convert()
-            self.background = pygame.transform.scale(self.background_img, (SCREEN_WIDTH, SCREEN_HEIGHT))
-        except:
-            self.background = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-            self.background.fill((100, 100, 255))
+        # Set up parallax background
+        self.parallax_bg = ParallaxBackground(SCREEN_WIDTH, SCREEN_HEIGHT)
+        
+        # Add background layers with different parallax factors
+        bg_paths = [
+            {"path": os.path.join("assets", "backgrounds", "DarkForest", "bg_shadows.png"), "factor": 0.1},
+            {"path": os.path.join("assets", "backgrounds", "DarkForest", "bg_far.png"), "factor": 0.3},
+            {"path": os.path.join("assets", "backgrounds", "DarkForest", "bg_mid.png"), "factor": 0.5},
+            {"path": os.path.join("assets", "backgrounds", "DarkForest", "bg_near.png"), "factor": 0.7}
+        ]
+        
+        # Try to load each layer
+        bg_loaded = False
+        for bg in bg_paths:
+            if os.path.exists(bg["path"]):
+                if self.parallax_bg.add_layer(bg["path"], bg["factor"]):
+                    bg_loaded = True
+        
+        # If no backgrounds were loaded, try the original windmillisle.png or create a fallback
+        if not bg_loaded:
+            try:
+                windmill_path = os.path.join("assets", "backgrounds", "windmillisle.png")
+                self.parallax_bg.add_layer(windmill_path, 0.1)
+            except:
+                # Create a solid color background as last resort
+                self.parallax_bg.add_color_layer((100, 100, 255))
         
         # Physics and visual objects
         self.static_bodies = []
         self.static_shapes = []
         self.visual_tiles = pygame.sprite.Group()
         self.mask_switch_triggers = []
+        self.finish_tiles = []  # Store finish line tiles
         self.switch_used = False
+        self.level_complete = False  # Track if level is complete
         
         # Layer tracking - only one is active at a time
         self.active_layer = "F"  # Start with F layer active
@@ -140,6 +163,7 @@ class PymunkLevel:
         f_ground.layer_name = "Masks F"
         f_ground.visible = (self.active_layer == "F")
         f_ground.has_collision = True
+        f_ground.is_finish_line = False
         self.visual_tiles.add(f_ground)
         
         # Add slope visuals
@@ -151,6 +175,7 @@ class PymunkLevel:
         slope1_sprite.layer_name = "Masks F"
         slope1_sprite.visible = (self.active_layer == "F")
         slope1_sprite.has_collision = True
+        slope1_sprite.is_finish_line = False
         self.visual_tiles.add(slope1_sprite)
         
         # B Layer visuals
@@ -161,6 +186,7 @@ class PymunkLevel:
         b_platform1.layer_name = "Masks B"
         b_platform1.visible = (self.active_layer == "B")
         b_platform1.has_collision = True
+        b_platform1.is_finish_line = False
         self.visual_tiles.add(b_platform1)
         
         b_platform2 = pygame.sprite.Sprite()
@@ -170,7 +196,20 @@ class PymunkLevel:
         b_platform2.layer_name = "Masks B"
         b_platform2.visible = (self.active_layer == "B")
         b_platform2.has_collision = True
+        b_platform2.is_finish_line = False
         self.visual_tiles.add(b_platform2)
+        
+        # Add finish line visual for test level
+        finish_sprite = pygame.sprite.Sprite()
+        finish_sprite.image = pygame.Surface((64, 64))
+        finish_sprite.image.fill((255, 255, 255))
+        finish_sprite.rect = pygame.Rect(2500, 550, 64, 64)
+        finish_sprite.layer_name = "Objects"
+        finish_sprite.visible = True
+        finish_sprite.has_collision = False
+        finish_sprite.is_finish_line = True
+        self.finish_tiles.append(finish_sprite)  # Add to finish tiles list
+        self.visual_tiles.add(finish_sprite)
 
     def create_loop(self, center_x, center_y, radius, segments=12):
         """Create a circular loop with segments (reduced from 16 to 12 segments)."""
@@ -196,15 +235,15 @@ class PymunkLevel:
 
     def load_tmx(self, tmx_map):
         """Load a level from a TMX file, loading only the active mask layer."""
+        # Clear any existing physics objects
+        self.clear_physics_objects()
+
         self.tmx_data = pytmx.load_pygame(tmx_map)
         self.width = self.tmx_data.width * self.TILE_SIZE
         self.height = self.tmx_data.height * self.TILE_SIZE
         self.camera = Camera(self.width, self.height)
         
-        # Clear any existing physics objects
-        self.clear_physics_objects()
-        
-        # Load all visual tiles first - both Surface F, Surface B, Masks F, Masks B
+        # Load all visual tiles first - both Surface F, Surface B, Masks F, Masks B, Objects
         self.load_visual_tiles()
         
         # Load only the active layer's collision shapes
@@ -235,11 +274,13 @@ class PymunkLevel:
         self.static_bodies = []
         self.static_shapes = []
         self.mask_switch_triggers = []
+        self.finish_tiles = []  # Clear finish tiles
 
     def load_visual_tiles(self):
-        """Load visual tiles for all layers - Surface F, Surface B, Masks F, Masks B."""
+        """Load visual tiles for all layers - Surface F, Surface B, Masks F, Masks B, Objects."""
         # Clear existing visual tiles
         self.visual_tiles.empty()
+        self.finish_tiles = []  # Clear finish tiles
         
         # Cache for better performance
         visible_layers = []
@@ -279,6 +320,17 @@ class PymunkLevel:
                     visual_tile.has_collision = (layer_name == "Masks F" or layer_name == "Masks B")
                     visual_tile.layer_name = layer_name
                     visual_tile.visible = is_visible
+                    
+                    # Check if this is a finish line tile in Objects layer
+                    if layer_name == "Objects":
+                        properties = self.tmx_data.get_tile_properties_by_gid(gid) or {}
+                        if properties.get('Finish Line', True):  # Check for exact "Finish Line" property
+                            visual_tile.is_finish_line = True
+                            self.finish_tiles.append(visual_tile)  # Add to finish tiles list
+                        else:
+                            visual_tile.is_finish_line = False
+                    else:
+                        visual_tile.is_finish_line = False
                     
                     tiles_to_add.append(visual_tile)
             
@@ -357,42 +409,6 @@ class PymunkLevel:
                             self.static_bodies.append(body)
                             self.static_shapes.append(shape)
 
-    def switch_layer(self):
-        """Switch between F and B layers, completely removing old shapes and creating new ones."""
-        # Update active layer
-        new_layer = "B" if self.active_layer == "F" else "F"
-        self.active_layer = new_layer
-        
-        # Store switches to preserve them
-        switches = []
-        switch_bodies = []
-        for i, shape in enumerate(self.static_shapes):
-            if hasattr(shape, 'collision_type') and shape.collision_type == self.physics.collision_types["switch"]:
-                switches.append(shape)
-                switch_bodies.append(self.static_bodies[i])
-        
-        # Clear all physics objects
-        self.clear_physics_objects()
-        
-        # Restore switches
-        self.static_shapes.extend(switches)
-        self.static_bodies.extend(switch_bodies)
-        self.mask_switch_triggers = switches
-        
-        # Create shapes for new active layer
-        if hasattr(self, 'tmx_data'):
-            # If we have TMX data, load from the map
-            self.load_collision_layer(f"Masks {self.active_layer}")
-        else:
-            # Otherwise we're in a test level
-            if self.active_layer == "F":
-                self.create_f_layer_test()
-            else:
-                self.create_b_layer_test()
-        
-        # Update visuals
-        self.update_visuals()
-
     def update_visuals(self):
         """Update visibility of visual tiles based on active layer."""
         for tile in self.visual_tiles:
@@ -411,28 +427,39 @@ class PymunkLevel:
 
     def update(self, dt=1/60.0):
         """Update level state."""
+        # Skip updates if level is complete
+        if self.level_complete:
+            return
+            
         self.ball.update()
         self.physics.step(dt)
         self.camera.update(self.ball)
         
-        # Handle switch collisions
-        for trigger in self.mask_switch_triggers:
-            # Detect collision with the ball
-            is_colliding = self.physics.check_collision(self.ball.shape, trigger)
-            
-            if is_colliding and not trigger.used:
-                # Activate switch
-                trigger.used = True
-                # Switch layers
-                self.switch_layer()
-            elif not is_colliding and trigger.used:
-                # Reset switch
-                trigger.used = False
+        # Update parallax background based on camera position
+        camera_center_x = -self.camera.offset_x + SCREEN_WIDTH/2
+        camera_center_y = -self.camera.offset_y + SCREEN_HEIGHT/2
+        self.parallax_bg.update(camera_center_x, camera_center_y)
+        
+        # Check for finish line collisions
+        self.check_finish_line()
+
+    def check_finish_line(self):
+        """Check if player has reached a finish line tile."""
+        # Simple collision check between ball and finish tiles
+        ball_rect = self.ball.rect
+        
+        for tile in self.finish_tiles:
+            if tile.visible and ball_rect.colliderect(tile.rect):
+                # Instead of freezing and quitting, just set the level_complete flag
+                self.level_complete = True
+                return True
+        
+        return False
 
     def draw(self, screen):
         """Draw level with visibility controls."""
-        # Draw background
-        screen.blit(self.background, (0, 0))
+        # Draw parallax background
+        self.parallax_bg.draw(screen)
         
         # Get visible tiles within viewport
         viewport_rect = self.camera.viewport
@@ -444,21 +471,19 @@ class PymunkLevel:
                 visible_tiles.append(tile)
         
         # Sort tiles by layer - optimization: pre-define layer order
-        layer_order = {"Surface B": 0, "Masks B": 1, "Masks F": 2, "Surface F": 3}
+        layer_order = {"Surface B": 0, "Masks B": 1, "Masks F": 2, "Surface F": 3, "Objects": 4}
         visible_tiles.sort(key=lambda t: layer_order.get(getattr(t, 'layer_name', ''), 0))
         
         # Draw visible tiles
         for tile in visible_tiles:
             screen.blit(tile.image, self.camera.apply(tile))
+            
+        for tile in self.finish_tiles:
+            screen.blit(flag_image, self.camera.apply(tile))
         
         # Draw the player ball
         screen.blit(self.ball.image, self.camera.apply(self.ball))
         
-        # Layer info with minimal text rendering
-        font = pygame.font.SysFont(None, 24)
-        layer_text = font.render(f"Active Layer: {self.active_layer} (Press L to switch)", True, (255, 255, 255))
-        screen.blit(layer_text, (10, 10))
-
     def create_body_from_mask(self, surface, x, y, friction=0.8, threshold=128):
         """Create a polygon shape from a surface mask - crucial for precise slopes."""
         try:

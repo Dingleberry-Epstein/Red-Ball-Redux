@@ -1,9 +1,12 @@
-import pygame, sys, numpy, json, math, configparser, os, pytmx, time
+import pygame, os, time
 
 from constants import *
 
-# Load TMX file
-Windmill_Isle_TMX = os.path.join("assets", "world building", "Tiled Worlds", "sonic test world.tmx")
+levels = []
+Level1 = os.path.join("assets", "world building", "Tiled Worlds", "Level1.tmx")
+Level2 = os.path.join("assets", "world building", "Tiled Worlds", "Level2.tmx")
+levels.append(Level1)
+levels.append(Level2)
 
 class GameObject(pygame.sprite.Sprite):
     """Base class for all game objects"""
@@ -209,7 +212,7 @@ class HealthBar:
         self.health_bar_height = 50  # Taller health bar
         # Position the health bar at the top of the screen
         self.health_bar_position = (self.screen.get_width() // 2 - self.health_bar_width // 2, 10)
-        self.font = RingFont
+        self.font = pygame.font.Font(os.path.join("assets", "doom.ttf"), 24)  # Load a pixelated font
         self.current_health_width = 0
         self.health_fraction = 1
         self.current_health_color = (0, 255, 0)

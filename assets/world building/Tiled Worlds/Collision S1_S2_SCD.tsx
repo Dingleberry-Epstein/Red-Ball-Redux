@@ -320,5 +320,9 @@
  <tile id="316"/>
  <tile id="317"/>
  <tile id="318"/>
- <tile id="319"/>
+ <tile id="319">
+  <properties>
+   <property name="finish line" type="bool" value="true"/>
+  </properties>
+ </tile>
 </tileset>

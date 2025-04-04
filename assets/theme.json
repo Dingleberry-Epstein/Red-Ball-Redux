@@ -1,0 +1,91 @@
+{
+    "defaults": {
+        "colours": {
+            "normal_bg": "#45494e",
+            "hovered_bg": "#35393e",
+            "disabled_bg": "#25292e",
+            "selected_bg": "#193754",
+            "dark_bg": "#15191e",
+            "normal_text": "#c5cbd8",
+            "hovered_text": "#FFFFFF",
+            "selected_text": "#FFFFFF",
+            "disabled_text": "#6d736f",
+            "link_text": "#0000EE",
+            "link_hover": "#2020FF",
+            "link_selected": "#551A8B",
+            "text_shadow": "#777777",
+            "normal_border": "#DDDDDD",
+            "hovered_border": "#B0B0B0",
+            "disabled_border": "#808080",
+            "selected_border": "#8080B0",
+            "active_border": "#8080B0",
+            "filled_bar": "#f4251b",
+            "unfilled_bar": "#CCCCCC"
+        },
+        "font": {
+            "name": "daydream",
+            "size": "14",
+            "regular_path": "assets/Daydream.ttf"
+        },
+        "misc": {
+            "text_shadow": "1",
+            "text_shadow_size": "1",
+            "text_shadow_offset": "1,1",
+            "text_horiz_alignment": "center",
+            "text_vert_alignment": "center",
+            "border_width": "2",
+            "shadow_width": "2",
+            "shape": "rounded_rectangle",
+            "shape_corner_radius": "2"
+        }
+    },
+    "button": {
+        "font": {
+            "name": "daydream",
+            "size": "30",
+            "regular_path": "assets/Daydream.ttf"
+        }
+    },
+    "text_box": {
+        "font": {
+            "name": "daydream",
+            "size": "18",
+            "regular_path": "assets/Daydream.ttf"
+        }
+    },
+    "label": {
+        "font": {
+            "name": "daydream",
+            "size": "14",
+            "regular_path": "assets/Daydream.ttf"
+        }
+    },
+    "drop_down_menu": {
+        "font": {
+            "name": "daydream",
+            "size": "14",
+            "regular_path": "assets/Daydream.ttf"
+        }
+    },
+    "text_entry_line": {
+        "font": {
+            "name": "daydream",
+            "size": "14",
+            "regular_path": "assets/Daydream.ttf"
+        }
+    },
+    "window_title": {
+        "font": {
+            "name": "daydream",
+            "size": "16",
+            "regular_path": "assets/Daydream.ttf"
+        }
+    },
+    "tooltip": {
+        "font": {
+            "name": "daydream",
+            "size": "12",
+            "regular_path": "assets/Daydream.ttf"
+        }
+    }
+}
