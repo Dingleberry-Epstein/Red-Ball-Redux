@@ -5,4 +5,8 @@ Test your skills against the great foe that is PHYSICS! Help the ball reach the 
 
 Good luck dear player, you're gonna need it!
 
-**NOTE: You will need to have the following packages installed:***
+**NOTE: You will need to have the following packages installed:**
+- Pygame-ce (Community edition required to work with Pygame GUI package)
+- PyTMX
+- Pymunk
+- Pygame_GUI
