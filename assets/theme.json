@@ -28,24 +28,239 @@
             "regular_path": "assets/Daydream.ttf"
         },
         "misc": {
-            "text_shadow": "1",
-            "text_shadow_size": "1",
-            "text_shadow_offset": "1,1",
+            "text_shadow": "0",
+            "text_shadow_size": "0",
+            "text_shadow_offset": "0,0",
             "text_horiz_alignment": "center",
             "text_vert_alignment": "center",
-            "border_width": "2",
-            "shadow_width": "2",
-            "shape": "rounded_rectangle",
-            "shape_corner_radius": "2"
+            "border_width": "0",
+            "shadow_width": "0",
+            "shape": "rectangle"
         }
     },
     "button": {
-        "font": {
-            "name": "daydream",
-            "size": "30",
-            "regular_path": "assets/Daydream.ttf"
+        "colours": {
+            "normal_bg": "#00000000",
+            "hovered_bg": "#00000000",
+            "disabled_bg": "#00000000",
+            "selected_bg": "#00000000",
+            "active_bg": "#00000000",
+            "normal_border": "#00000000",
+            "hovered_border": "#00000000",
+            "disabled_border": "#00000000",
+            "selected_border": "#00000000",
+            "active_border": "#00000000"
+        },
+        "misc": {
+            "border_width": "0",
+            "shadow_width": "0"
         }
     },
+    
+    "#play_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/play.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/play.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Pplay.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/play.png"
+            }
+        }
+    },
+    
+    "#exit_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/exit.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/exit.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Pexit.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/exit.png"
+            }
+        }
+    },
+    
+    "#settings_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/settings.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/settings.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Psettings.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/settings.png"
+            }
+        }
+    },
+    
+    "#audio_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/audio.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/audio.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Paudio.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/audio.png"
+            }
+        }
+    },
+    
+    "#music_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/music.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/music.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Pmusic.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/music.png"
+            }
+        }
+    },
+    
+    "#mute_audio_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/mute audio.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/mute audio.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Pmute audio.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/mute audio.png"
+            }
+        }
+    },
+    
+    "#pause_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/pause.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/pause.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Ppause.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/pause.png"
+            }
+        }
+    },
+    
+    "#respawn_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/respawn.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/respawn.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Prespawn.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/respawn.png"
+            }
+        }
+    },
+    
+    "#return_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/return.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/return.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Preturn.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/return.png"
+            }
+        }
+    },
+    
+    "#accept_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/accept.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/accept.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Paccept.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/accept.png"
+            }
+        }
+    },
+    
+    "#cancel_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/cancel.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/cancel.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Pcancel.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/cancel.png"
+            }
+        }
+    },
+    
+    "#credits_button": {
+        "images": {
+            "normal_image": {
+                "path": "assets/sprites/buttons/unpressed/credits.png"
+            },
+            "hovered_image": {
+                "path": "assets/sprites/buttons/unpressed/credits.png"
+            },
+            "selected_image": {
+                "path": "assets/sprites/buttons/pressed/Pcredits.png"
+            },
+            "disabled_image": {
+                "path": "assets/sprites/buttons/unpressed/credits.png"
+            }
+        }
+    },
+    
     "text_box": {
         "font": {
             "name": "daydream",
@@ -76,7 +291,7 @@
     },
     "window_title": {
         "font": {
-            "name": "daydream",
+            "name": "daydream", 
             "size": "16",
             "regular_path": "assets/Daydream.ttf"
         }

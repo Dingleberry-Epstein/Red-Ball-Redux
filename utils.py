@@ -1,4 +1,4 @@
-import pygame, os, pymunk
+import pygame, os, pymunk, random, math, pygame_gui
 from constants import *
 
 pygame.init()
@@ -65,89 +65,6 @@ class CameraAwareGroup(pygame.sprite.Group):
 		for sprite in self.sprites():
 			offset_rect = sprite.rect.move(self.camera.offset_x, self.camera.offset_y)
 			surface.blit(sprite.image, offset_rect)
-
-class Button:
-	# Interactive button class for UI elements
-	def __init__(self, x, y, width, height, text):
-		# Initialize a button with position and text
-		"""
-		Args:
-			x (int): X position
-			y (int): Y position
-			width (int): Button width
-			height (int): Button height
-			text (str): Button text
-		"""
-		self.rect = pygame.Rect(x, y, width, height)
-		self.default_color = GRAY
-		self.hover_color = LIGHT_GRAY
-		self.clicked = False
-		self.hovered = False
-		self.text = text
-		self.hover_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "HoverSound.mp3"))
-		self.select_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "SelectSound.mp3"))
-		self.hover_sound_played = False
-		self.click_sound_played = False
-
-	def draw(self, surface, font, text_color=(0, 0, 0)):
-		# Draw the button on a surface
-		"""
-		Args:
-			surface (pygame.Surface): Surface to draw on
-			font (pygame.font.Font): Font for text rendering
-			text_color (tuple): RGB color for text
-		"""
-		# Use hover color if hovered, otherwise default color
-		color = self.hover_color if self.hovered else self.default_color
-		
-		# Draw button rectangle
-		pygame.draw.rect(surface, color, self.rect)
-		
-		# Render and center text
-		text_surface = font.render(self.text, True, text_color)
-		text_rect = text_surface.get_rect(center=self.rect.center)
-		surface.blit(text_surface, text_rect)
-
-	def handle_event(self, event):
-		# Handle mouse events for the button
-		"""
-		Args:
-			event (pygame.event.Event): Pygame event to process
-			
-		Returns:
-			bool: True if button was clicked, False otherwise
-		"""
-		if event.type == pygame.MOUSEMOTION:
-			# Check for hover state
-			pos = pygame.mouse.get_pos()
-			self.hovered = self.rect.collidepoint(pos)
-			
-			# Play hover sound once when first hovering
-			if self.hovered and not self.hover_sound_played:
-				self.hover_sound.play()
-				self.hover_sound_played = True
-			elif not self.hovered:
-				self.hover_sound_played = False
-				
-		elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-			# Check for click state
-			pos = pygame.mouse.get_pos()
-			is_clicked = self.rect.collidepoint(pos)
-			
-			# Play select sound once when clicked
-			if is_clicked and not self.click_sound_played:
-				self.select_sound.play()
-				self.click_sound_played = True
-				self.clicked = True
-			elif not is_clicked:
-				self.click_sound_played = False
-				
-		elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-			was_clicked = self.clicked
-			self.clicked = False
-			return was_clicked and self.rect.collidepoint(pygame.mouse.get_pos())
-			
-		return False
 
 class SceneManager:
     """Handles scene transitions and effects with improved fade functionality."""
@@ -601,3 +518,39 @@ class ParallaxBackground:
                     x = pos_x + (i * layer['width'])
                     y = pos_y + (j * layer['height'])
                     screen.blit(layer['image'], (x, y))
+
+def load_button_images(button_name, unpressed_folder, pressed_folder):
+    """Loads unpressed and pressed images for a button."""
+    unpressed_path = os.path.join(unpressed_folder, f"{button_name}.png")
+    pressed_path = os.path.join(pressed_folder, f"P{button_name}.png") # add 'P' to pressed button name.
+
+    try:
+        unpressed_image = pygame.image.load(unpressed_path).convert_alpha()
+        pressed_image = pygame.image.load(pressed_path).convert_alpha()
+        return unpressed_image, pressed_image
+    except FileNotFoundError:
+        print(f"Error: Could not find images for {button_name}")
+        return None, None
+
+import pygame_gui
+
+def create_sprite_button(rect, manager):
+    """Creates a Pygame-GUI button with minimal arguments."""
+    button = pygame_gui.elements.UIButton(
+        relative_rect=rect,
+        text='',  # No text, just sprites
+        manager=manager
+    )
+    return button
+
+def load_button_images(button_name, unpressed_folder, pressed_folder):
+    """Loads unpressed and pressed images for a button or returns None if not found."""
+    unpressed_path = os.path.join(unpressed_folder, f"{button_name}.png")
+    pressed_path = os.path.join(pressed_folder, f"P{button_name}.png")
+
+    try:
+        unpressed_image = pygame.image.load(unpressed_path).convert_alpha()
+        pressed_image = pygame.image.load(pressed_path).convert_alpha()
+        return unpressed_image, pressed_image
+    except FileNotFoundError:
+        return None, None

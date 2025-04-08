@@ -10,18 +10,38 @@ from characters import PurePymunkBall
 from utils import Camera
 import math
 
+pygame.mixer.init()
+
+Level1 = os.path.join("assets", "world building", "Tiled Worlds", "Level1.tmx")
+Level2 = os.path.join("assets", "world building", "Tiled Worlds", "Level2.tmx")
+level3 = os.path.join("assets", "world building", "Tiled Worlds", "Level3.tmx")
+level4 = os.path.join("assets", "world building", "Tiled Worlds", "Level4.tmx")
+level5 = os.path.join("assets", "world building", "Tiled Worlds", "Level5.tmx")
+levels = [Level1, Level2, level3, level4, level5]
+spawn1 = (178, 1900)
+spawn2 = (50, 1500)
+spawn3 = (50, 1500)
+spawn4 = (50, 900)
+spawn5 = (50, 5228)
+spawn_points = [spawn1, spawn2, spawn3, spawn4, spawn5]
+
 class PymunkLevel:
     """Level that loads mask layers on demand, creating and destroying hitboxes completely when switching."""
 
-    def __init__(self, tmx_map=None):
+    def __init__(self, spawn, tmx_map=None):
+        x, y = spawn
+        self.spawn_point = spawn # store spawn point.d
         self.physics = PhysicsManager()
         self.TILE_SIZE = 64
-        self.ball = PurePymunkBall(self.physics, 178, 1800)
+        self.ball = PurePymunkBall(self.physics, x, y)
         self.camera = Camera(2000, 2000)
-        
+        pygame.mixer_music.fadeout(500)
+        pygame.mixer_music.load(os.path.join("assets", "music", "level 1.mp3"))
+        pygame.mixer_music.play(-1)
+
         # Set up parallax background
         self.parallax_bg = ParallaxBackground(SCREEN_WIDTH, SCREEN_HEIGHT)
-        
+
         # Add background layers with different parallax factors
         bg_paths = [
             {"path": os.path.join("assets", "backgrounds", "DarkForest", "bg_shadows.png"), "factor": 0.1},
@@ -29,14 +49,14 @@ class PymunkLevel:
             {"path": os.path.join("assets", "backgrounds", "DarkForest", "bg_mid.png"), "factor": 0.5},
             {"path": os.path.join("assets", "backgrounds", "DarkForest", "bg_near.png"), "factor": 0.7}
         ]
-        
+
         # Try to load each layer
         bg_loaded = False
         for bg in bg_paths:
             if os.path.exists(bg["path"]):
                 if self.parallax_bg.add_layer(bg["path"], bg["factor"]):
                     bg_loaded = True
-        
+
         # If no backgrounds were loaded, try the original windmillisle.png or create a fallback
         if not bg_loaded:
             try:
@@ -45,7 +65,7 @@ class PymunkLevel:
             except:
                 # Create a solid color background as last resort
                 self.parallax_bg.add_color_layer((100, 100, 255))
-        
+
         # Physics and visual objects
         self.static_bodies = []
         self.static_shapes = []
@@ -54,162 +74,17 @@ class PymunkLevel:
         self.finish_tiles = []  # Store finish line tiles
         self.switch_used = False
         self.level_complete = False  # Track if level is complete
-        
+        self.checkpoints = [] # list of checkpoints.
+
         # Layer tracking - only one is active at a time
         self.active_layer = "F"  # Start with F layer active
-        
+
         # Load the level
         if tmx_map:
             self.tmx_map = tmx_map
             self.load_tmx(tmx_map)
         else:
             self.create_test_level()
-
-    def create_test_level(self):
-        """Create a simple test level with F and B sections."""
-        # Set level dimensions
-        self.width = 3000
-        self.height = 1000
-        
-        # Update camera bounds
-        self.camera = Camera(self.width, self.height)
-        
-        # Create shapes for currently active layer only
-        if self.active_layer == "F":
-            self.create_f_layer_test()
-        else:
-            self.create_b_layer_test()
-        
-        # Create a test switch that's always present
-        body, shape = self.physics.create_box(350, 450, 64, 64, is_static=True, collision_type="switch")
-        shape.collision_type = self.physics.collision_types["switch"]
-        shape.used = False
-        shape.switch_id = 0
-        self.mask_switch_triggers.append(shape)
-        self.static_bodies.append(body)
-        self.static_shapes.append(shape)
-        
-        # Create visual representations for both layers
-        self.create_test_visuals()
-
-    def create_f_layer_test(self):
-        """Create test level shapes for F layer."""
-        # Ground platform
-        body, shape = self.physics.create_box(-200, 500, 1000, 50)
-        self.static_bodies.append(body)
-        self.static_shapes.append(shape)
-
-        # First slope
-        slope_vertices = [(800, 500), (1000, 400), (1000, 500)]
-        body, shape = self.physics.create_poly(slope_vertices)
-        if body and shape:
-            self.static_bodies.append(body)
-            self.static_shapes.append(shape)
-
-        # Middle platform
-        body, shape = self.physics.create_box(1000, 400, 300, 50)
-        self.static_bodies.append(body)
-        self.static_shapes.append(shape)
-
-        # Second slope
-        slope2_vertices = [(1300, 400), (1500, 550), (1300, 550)]
-        body, shape = self.physics.create_poly(slope2_vertices, friction=0.7)
-        if body and shape:
-            self.static_bodies.append(body)
-            self.static_shapes.append(shape)
-
-        # Bottom platform
-        body, shape = self.physics.create_box(1500, 550, 400, 50)
-        self.static_bodies.append(body)
-        self.static_shapes.append(shape)
-
-        # Loop
-        self.create_loop(2100, 450, 100, 12)  # Reduced segments from 16 to 12 for performance
-
-        # Platform before loop
-        body, shape = self.physics.create_box(1900, 550, 100, 50)
-        self.static_bodies.append(body)
-        self.static_shapes.append(shape)
-
-        # Platform after loop
-        body, shape = self.physics.create_box(2300, 550, 200, 50)
-        self.static_bodies.append(body)
-        self.static_shapes.append(shape)
-
-    def create_b_layer_test(self):
-        """Create test level shapes for B layer."""
-        # Alternative path - higher platforms
-        body, shape = self.physics.create_box(400, 400, 600, 50)
-        self.static_bodies.append(body)
-        self.static_shapes.append(shape)
-
-        # Second platform
-        body, shape = self.physics.create_box(1200, 300, 400, 50)
-        self.static_bodies.append(body)
-        self.static_shapes.append(shape)
-        
-        # End platform
-        body, shape = self.physics.create_box(1800, 350, 600, 50)
-        self.static_bodies.append(body)
-        self.static_shapes.append(shape)
-
-    def create_test_visuals(self):
-        """Create visual representations for test level."""
-        # F Layer visuals
-        f_ground = pygame.sprite.Sprite()
-        f_ground.image = pygame.Surface((1000, 50))
-        f_ground.image.fill((200, 0, 0))
-        f_ground.rect = pygame.Rect(-200, 500, 1000, 50)
-        f_ground.layer_name = "Masks F"
-        f_ground.visible = (self.active_layer == "F")
-        f_ground.has_collision = True
-        f_ground.is_finish_line = False
-        self.visual_tiles.add(f_ground)
-        
-        # Add slope visuals
-        slope1_visual = pygame.Surface((200, 100), pygame.SRCALPHA)
-        pygame.draw.polygon(slope1_visual, (200, 0, 0), [(0, 100), (200, 0), (200, 100)])
-        slope1_sprite = pygame.sprite.Sprite()
-        slope1_sprite.image = slope1_visual
-        slope1_sprite.rect = pygame.Rect(800, 400, 200, 100)
-        slope1_sprite.layer_name = "Masks F"
-        slope1_sprite.visible = (self.active_layer == "F")
-        slope1_sprite.has_collision = True
-        slope1_sprite.is_finish_line = False
-        self.visual_tiles.add(slope1_sprite)
-        
-        # B Layer visuals
-        b_platform1 = pygame.sprite.Sprite()
-        b_platform1.image = pygame.Surface((600, 50))
-        b_platform1.image.fill((0, 0, 200))
-        b_platform1.rect = pygame.Rect(400, 400, 600, 50)
-        b_platform1.layer_name = "Masks B"
-        b_platform1.visible = (self.active_layer == "B")
-        b_platform1.has_collision = True
-        b_platform1.is_finish_line = False
-        self.visual_tiles.add(b_platform1)
-        
-        b_platform2 = pygame.sprite.Sprite()
-        b_platform2.image = pygame.Surface((400, 50))
-        b_platform2.image.fill((0, 0, 200))
-        b_platform2.rect = pygame.Rect(1200, 300, 400, 50)
-        b_platform2.layer_name = "Masks B"
-        b_platform2.visible = (self.active_layer == "B")
-        b_platform2.has_collision = True
-        b_platform2.is_finish_line = False
-        self.visual_tiles.add(b_platform2)
-        
-        # Add finish line visual for test level
-        finish_sprite = pygame.sprite.Sprite()
-        finish_sprite.image = pygame.Surface((64, 64))
-        finish_sprite.image.fill((255, 255, 255))
-        finish_sprite.rect = pygame.Rect(2500, 550, 64, 64)
-        finish_sprite.layer_name = "Objects"
-        finish_sprite.visible = True
-        finish_sprite.has_collision = False
-        finish_sprite.is_finish_line = True
-        self.finish_tiles.append(finish_sprite)  # Add to finish tiles list
-        self.visual_tiles.add(finish_sprite)
 
     def create_loop(self, center_x, center_y, radius, segments=12):
         """Create a circular loop with segments (reduced from 16 to 12 segments)."""
@@ -242,16 +117,16 @@ class PymunkLevel:
         self.width = self.tmx_data.width * self.TILE_SIZE
         self.height = self.tmx_data.height * self.TILE_SIZE
         self.camera = Camera(self.width, self.height)
-        
+
         # Load all visual tiles first - both Surface F, Surface B, Masks F, Masks B, Objects
         self.load_visual_tiles()
-        
+
         # Load only the active layer's collision shapes
         if self.active_layer == "F":
             self.load_collision_layer("Masks F")
         else:
             self.load_collision_layer("Masks B")
-        
+
         # Process triggers (always present regardless of active layer)
         self.load_triggers()
 
@@ -263,13 +138,13 @@ class PymunkLevel:
                 self.physics.space.remove(shape)
             except:
                 pass
-                
+
         for body in self.static_bodies:
             try:
                 self.physics.space.remove(body)
             except:
                 pass
-        
+
         # Clear all lists
         self.static_bodies = []
         self.static_shapes = []
@@ -281,38 +156,36 @@ class PymunkLevel:
         # Clear existing visual tiles
         self.visual_tiles.empty()
         self.finish_tiles = []  # Clear finish tiles
-        
+
         # Cache for better performance
         visible_layers = []
         for layer in self.tmx_data.visible_layers:
             if isinstance(layer, pytmx.TiledTileLayer):
                 visible_layers.append(layer)
-        
+
         # Process all layers
         for layer in visible_layers:
             layer_name = layer.name if hasattr(layer, 'name') else "Unnamed"
-            
-            # Set visibility based on active layer for mask layers
+
+            # Set visibility based on layer type
             is_visible = True
-            if layer_name == "Masks F":
-                is_visible = (self.active_layer == "F")
-            elif layer_name == "Masks B":
-                is_visible = (self.active_layer == "B")
-            
+            if layer_name == "Masks F" or layer_name == "Masks B":
+                is_visible = False  # Always set mask layers to invisible
+
             # Process tiles in batches for better performance
             tiles_to_add = []
-            
+
             for x, y, gid in layer.tiles():
                 if gid:
                     world_x = x * self.TILE_SIZE
                     world_y = y * self.TILE_SIZE
-                    
+
                     # Get tile image
                     tile_image = gid
                     if not tile_image:
                         tile_image = pygame.Surface((self.TILE_SIZE, self.TILE_SIZE))
                         tile_image.fill((255, 0, 0))
-                    
+
                     # Create visual tile
                     visual_tile = pygame.sprite.Sprite()
                     visual_tile.image = pygame.transform.scale(tile_image, (self.TILE_SIZE, self.TILE_SIZE))
@@ -320,7 +193,7 @@ class PymunkLevel:
                     visual_tile.has_collision = (layer_name == "Masks F" or layer_name == "Masks B")
                     visual_tile.layer_name = layer_name
                     visual_tile.visible = is_visible
-                    
+
                     # Check if this is a finish line tile in Objects layer
                     if layer_name == "Objects":
                         properties = self.tmx_data.get_tile_properties_by_gid(gid) or {}
@@ -331,40 +204,40 @@ class PymunkLevel:
                             visual_tile.is_finish_line = False
                     else:
                         visual_tile.is_finish_line = False
-                    
+
                     tiles_to_add.append(visual_tile)
-            
+
             # Add tiles in a batch
             self.visual_tiles.add(tiles_to_add)
 
     def load_collision_layer(self, layer_name):
         """Load collision shapes for a specific layer using masks for precise shapes."""
         processed_tiles = set()
-        
+
         # Cache layers for better performance
         collision_layers = []
         for layer in self.tmx_data.visible_layers:
             if isinstance(layer, pytmx.TiledTileLayer) and layer.name == layer_name:
                 collision_layers.append(layer)
-        
+
         for layer in collision_layers:
             for x, y, gid in layer.tiles():
                 if gid:
                     world_x = x * self.TILE_SIZE
                     world_y = y * self.TILE_SIZE
                     tile_key = (world_x, world_y)
-                    
+
                     # Skip if already processed
                     if tile_key in processed_tiles:
                         continue
                     processed_tiles.add(tile_key)
-                    
+
                     # Get tile properties
                     properties = self.tmx_data.get_tile_properties_by_gid(gid) or {}
                     shape_type = self.get_shape_type(properties)
                     angle = properties.get('angle', 0)
                     friction = self.get_friction_for_shape(shape_type, angle)
-                    
+
                     # Create collision shape based on type
                     if shape_type == "slope":
                         vertices = self.get_slope_vertices(world_x, world_y, self.TILE_SIZE, self.TILE_SIZE, angle)
@@ -379,7 +252,7 @@ class PymunkLevel:
                         success = False
                         if tile_image:
                             success = self.create_body_from_mask(tile_image, world_x, world_y, friction)
-                        
+
                         # Fall back to box if needed
                         if not success:
                             body, shape = self.physics.create_box(world_x, world_y, self.TILE_SIZE, self.TILE_SIZE, friction=friction)
@@ -395,19 +268,21 @@ class PymunkLevel:
                     if hasattr(obj, 'name') and obj.name == "Loop Switch":
                         # Create switch
                         body, shape = self.physics.create_box(
-                            obj.x, obj.y, obj.width, obj.height, 
-                            is_static=True, 
+                            obj.x, obj.y, obj.width, obj.height,
+                            is_static=True,
                             collision_type="switch"
                         )
-                        
+
                         if body and shape:
                             shape.used = False
                             shape.switch_id = i
                             shape.collision_type = self.physics.collision_types["switch"]
-                            
+
                             self.mask_switch_triggers.append(shape)
                             self.static_bodies.append(body)
                             self.static_shapes.append(shape)
+                    elif hasattr(obj, 'name') and obj.name == "Checkpoint": # add checkpoint loading.
+                        self.checkpoints.append((obj.x, obj.y))
 
     def update_visuals(self):
         """Update visibility of visual tiles based on active layer."""
@@ -430,66 +305,93 @@ class PymunkLevel:
         # Skip updates if level is complete
         if self.level_complete:
             return
-            
+
         self.ball.update()
         self.physics.step(dt)
         self.camera.update(self.ball)
-        
+
         # Update parallax background based on camera position
         camera_center_x = -self.camera.offset_x + SCREEN_WIDTH/2
         camera_center_y = -self.camera.offset_y + SCREEN_HEIGHT/2
         self.parallax_bg.update(camera_center_x, camera_center_y)
-        
+
         # Check for finish line collisions
         self.check_finish_line()
+
+        # Check if the ball has fallen off the bottom of the world.
+        if self.ball.body.position[1] > self.height - 20:
+            self.ball.death()
+
+        # Check for ball death and reset
+        if self.ball.is_dead:
+            self.reset_ball()
+
+    def reset_ball(self):
+        """Reset the ball to the last checkpoint or spawn point."""
+        if not self.ball.is_dead:
+            self.ball.death()
+        
+        if self.ball.is_dead:
+            if self.checkpoints:
+                # Reset to the last checkpoint
+                last_checkpoint = self.checkpoints[-1]
+                spawn_x, spawn_y = last_checkpoint
+            else:
+                # Reset to the original spawn point
+                spawn_x, spawn_y = self.spawn_point
+
+            self.ball.kill()
+
+            # Create a new ball
+            self.ball = PurePymunkBall(self.physics, spawn_x, spawn_y)
 
     def check_finish_line(self):
         """Check if player has reached a finish line tile."""
         # Simple collision check between ball and finish tiles
         ball_rect = self.ball.rect
-        
+
         for tile in self.finish_tiles:
             if tile.visible and ball_rect.colliderect(tile.rect):
                 # Instead of freezing and quitting, just set the level_complete flag
                 self.level_complete = True
                 return True
-        
+
         return False
 
     def draw(self, screen):
         """Draw level with visibility controls."""
         # Draw parallax background
         self.parallax_bg.draw(screen)
-        
+
         # Get visible tiles within viewport
         viewport_rect = self.camera.viewport
-        
+
         # Optimization: Only process visible tiles
         visible_tiles = []
         for tile in self.visual_tiles:
             if tile.visible and tile.rect.colliderect(viewport_rect):
                 visible_tiles.append(tile)
-        
+
         # Sort tiles by layer - optimization: pre-define layer order
         layer_order = {"Surface B": 0, "Masks B": 1, "Masks F": 2, "Surface F": 3, "Objects": 4}
         visible_tiles.sort(key=lambda t: layer_order.get(getattr(t, 'layer_name', ''), 0))
+
+        # Draw the player ball
+        screen.blit(self.ball.image, self.camera.apply(self.ball))
         
         # Draw visible tiles
         for tile in visible_tiles:
             screen.blit(tile.image, self.camera.apply(tile))
-            
+
         for tile in self.finish_tiles:
             screen.blit(flag_image, self.camera.apply(tile))
-        
-        # Draw the player ball
-        screen.blit(self.ball.image, self.camera.apply(self.ball))
-        
+
     def create_body_from_mask(self, surface, x, y, friction=0.8, threshold=128):
         """Create a polygon shape from a surface mask - crucial for precise slopes."""
         try:
             if surface is None:
                 return False
-                
+
             scaled_surface = pygame.transform.scale(surface, (self.TILE_SIZE, self.TILE_SIZE))
             mask = pygame.mask.from_surface(scaled_surface)
             outline = mask.outline()
@@ -572,3 +474,56 @@ class PymunkLevel:
             h = height * (pos_angle / 90)
             return [(x, y + height - h), (x, y + height), (x + width, y + height)]
         return [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
+    
+class CaveLevel(PymunkLevel):
+    """Cave-themed level with fog particle effects"""
+    def __init__(self, spawn, tmx_map=None):
+        # Call the parent class constructor properly
+        super().__init__(spawn, tmx_map)
+        
+        try:
+            pygame.mixer_music.load(os.path.join("assets", "music", "cave.mp3"))
+            pygame.mixer_music.play(-1)
+        except:
+            # If cave music doesn't exist, keep the current music
+            print("Cave music not found, keeping current track")
+        
+        # Override the parallax background with cave-themed images
+        self.parallax_bg = ParallaxBackground(SCREEN_WIDTH, SCREEN_HEIGHT)
+        
+        # Define cave-themed background paths
+        cave_bg_paths = [
+            {"path": os.path.join("assets", "backgrounds", "Parallax Cave", "1.png"), "factor": 0.08},
+            {"path": os.path.join("assets", "backgrounds", "Parallax Cave", "2.png"), "factor": 0.16},
+            {"path": os.path.join("assets", "backgrounds", "Parallax Cave", "3.png"), "factor": 0.24},
+            {"path": os.path.join("assets", "backgrounds", "Parallax Cave", "4.png"), "factor": 0.32},
+            {"path": os.path.join("assets", "backgrounds", "Parallax Cave", "5.png"), "factor": 0.4},
+            {"path": os.path.join("assets", "backgrounds", "Parallax Cave", "6.png"), "factor": 0.48},
+            {"path": os.path.join("assets", "backgrounds", "Parallax Cave", "7.png"), "factor": 0.56},
+            {"path": os.path.join("assets", "backgrounds", "Parallax Cave", "8.png"), "factor": 0.64},
+            {"path": os.path.join("assets", "backgrounds", "Parallax Cave", "9.png"), "factor": 0.72}
+        ]
+        
+        # Try to load each cave layer
+        bg_loaded = False
+        for bg in cave_bg_paths:
+            if os.path.exists(bg["path"]):
+                if self.parallax_bg.add_layer(bg["path"], bg["factor"]):
+                    bg_loaded = True
+        
+        # If no cave backgrounds are found, use fallback
+        if not bg_loaded:
+            # Create dark-colored backgrounds to simulate a cave
+            self.parallax_bg.add_color_layer((20, 20, 30))  # Very dark blue-grey
+            self.parallax_bg.add_color_layer((30, 25, 40), 0.3)  # Dark purple-grey
+            self.parallax_bg.add_color_layer((40, 30, 50), 0.5)  # Medium purple-grey
+    
+    def update(self, dt=1/60.0):
+        """Update level state including fog particles"""
+        # Call the parent update method
+        super().update(dt)
+    
+    def draw(self, screen):
+        """Draw level with fog effects"""
+        # Draw the base level (including parallax background and tiles)
+        super().draw(screen)

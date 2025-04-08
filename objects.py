@@ -2,12 +2,6 @@ import pygame, os, time
 
 from constants import *
 
-levels = []
-Level1 = os.path.join("assets", "world building", "Tiled Worlds", "Level1.tmx")
-Level2 = os.path.join("assets", "world building", "Tiled Worlds", "Level2.tmx")
-levels.append(Level1)
-levels.append(Level2)
-
 class GameObject(pygame.sprite.Sprite):
     """Base class for all game objects"""
     def __init__(self, x, y):
