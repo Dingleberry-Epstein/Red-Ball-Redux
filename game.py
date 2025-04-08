@@ -413,7 +413,6 @@ class Game:
                     self.buttons['play'].show()
                     self.buttons['settings'].show()
                     self.buttons['exit'].show()
-                    self.buttons['credits'].show()
 
     def render_outlined_text(self, text, color, outline_color, position):
         """Render text with an outline effect"""
@@ -630,7 +629,6 @@ class Game:
             self.buttons['play'].show()
             self.buttons['settings'].show()
             self.buttons['exit'].show()
-            self.buttons['credits'].show()
 
             # Create a surface with alpha for fading effect
             ui_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -646,7 +644,7 @@ class Game:
             self.buttons['play'].hide()
             self.buttons['settings'].hide()
             self.buttons['exit'].hide()
-            self.buttons['credits'].hide()
+            
 
     def render_main_menu(self):
         """Render main menu screen"""
@@ -684,10 +682,6 @@ class Game:
                     pygame.mixer_music.fadeout(900)
                     SceneManager.fade_to_black(self.screen, render_main_menu, self.fade_duration)
                     self.running = False
-                elif event.ui_element == self.buttons['credits']:
-                    # Show credits screen or info
-                    print("Credits button pressed")
-                    # Implement credits screen functionality
                 
                 # Return button (used in submenus)
                 elif event.ui_element == self.buttons['return']:
@@ -703,7 +697,6 @@ class Game:
                         self.buttons['play'].show()
                         self.buttons['settings'].show()
                         self.buttons['exit'].show()
-                        self.buttons['credits'].show()
                 
                 # Audio control buttons
                 elif event.ui_element == self.buttons['music']:
@@ -730,7 +723,6 @@ class Game:
         self.buttons['play'].hide()
         self.buttons['settings'].hide()
         self.buttons['exit'].hide()
-        self.buttons['credits'].hide()
         
         # Show return button
         self.buttons['return'].show()
@@ -774,7 +766,6 @@ class Game:
         self.buttons['play'].show()
         self.buttons['settings'].show()
         self.buttons['exit'].show()
-        self.buttons['credits'].show()
         
         self.level_select_open = False
 
@@ -803,7 +794,6 @@ class Game:
         self.buttons['play'].hide()
         self.buttons['settings'].hide()
         self.buttons['exit'].hide()
-        self.buttons['credits'].hide()
         
         # Show settings-related buttons
         self.buttons['audio'].show()
