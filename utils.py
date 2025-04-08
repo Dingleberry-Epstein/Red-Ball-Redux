@@ -554,3 +554,121 @@ def load_button_images(button_name, unpressed_folder, pressed_folder):
         return unpressed_image, pressed_image
     except FileNotFoundError:
         return None, None
+
+class SpatialGrid:
+    """
+    Spatial partitioning grid for efficient tile querying.
+    Organizes game objects into a grid for fast spatial lookups.
+    """
+    def __init__(self, cell_size=128):
+        """
+        Initialize the spatial grid.
+        
+        Args:
+            cell_size: Size of each grid cell (should be larger than typical tile size)
+        """
+        self.cell_size = cell_size
+        self.grid = {}  # Dictionary mapping (grid_x, grid_y) to list of objects
+        
+    def _get_cell_coords(self, x, y):
+        """Convert world coordinates to grid cell coordinates."""
+        grid_x = x // self.cell_size
+        grid_y = y // self.cell_size
+        return int(grid_x), int(grid_y)
+        
+    def insert(self, obj):
+        """
+        Insert an object into the spatial grid.
+        
+        Args:
+            obj: Object with rect attribute (pygame.Rect)
+        """
+        # Get the grid cell for the object's position
+        grid_x, grid_y = self._get_cell_coords(obj.rect.x, obj.rect.y)
+        
+        # Create the cell if it doesn't exist
+        cell_key = (grid_x, grid_y)
+        if cell_key not in self.grid:
+            self.grid[cell_key] = []
+            
+        # Add the object to the cell
+        self.grid[cell_key].append(obj)
+        
+        # Store grid position on the object for quick removal
+        obj.grid_pos = cell_key
+        
+    def remove(self, obj):
+        """
+        Remove an object from the spatial grid.
+        
+        Args:
+            obj: Object to remove
+        """
+        if hasattr(obj, 'grid_pos'):
+            cell_key = obj.grid_pos
+            if cell_key in self.grid and obj in self.grid[cell_key]:
+                self.grid[cell_key].remove(obj)
+                
+    def update(self, obj):
+        """
+        Update an object's position in the grid.
+        
+        Args:
+            obj: Object with rect attribute (pygame.Rect)
+        """
+        old_cell_key = getattr(obj, 'grid_pos', None)
+        new_cell_key = self._get_cell_coords(obj.rect.x, obj.rect.y)
+        
+        # If the object has moved to a new cell
+        if old_cell_key != new_cell_key:
+            # Remove from old cell
+            if old_cell_key and old_cell_key in self.grid and obj in self.grid[old_cell_key]:
+                self.grid[old_cell_key].remove(obj)
+                
+            # Add to new cell
+            if new_cell_key not in self.grid:
+                self.grid[new_cell_key] = []
+                
+            self.grid[new_cell_key].append(obj)
+            obj.grid_pos = new_cell_key
+            
+    def query_rect(self, rect, buffer=0):
+        """
+        Get all objects that could be in the given rectangle plus a buffer.
+        
+        Args:
+            rect: pygame.Rect to query
+            buffer: Optional buffer distance around the rect
+        
+        Returns:
+            List of objects in the area
+        """
+        # Expand the rectangle by the buffer
+        expanded_rect = rect.inflate(buffer * 2, buffer * 2)
+        
+        # Calculate grid cells covered by the expanded rectangle
+        min_x, min_y = self._get_cell_coords(expanded_rect.left, expanded_rect.top)
+        max_x, max_y = self._get_cell_coords(expanded_rect.right, expanded_rect.bottom)
+        
+        # Collect all objects in those cells
+        result = []
+        for grid_x in range(min_x, max_x + 1):
+            for grid_y in range(min_y, max_y + 1):
+                cell_key = (grid_x, grid_y)
+                if cell_key in self.grid:
+                    result.extend(self.grid[cell_key])
+                    
+        return result
+    
+    def query_point(self, x, y):
+        """
+        Get all objects in the cell containing the point.
+        
+        Args:
+            x, y: World coordinates
+        
+        Returns:
+            List of objects in the cell
+        """
+        cell_key = self._get_cell_coords(x, y)
+        return self.grid.get(cell_key, [])

@@ -1,6 +1,6 @@
 import pygame, pygame_gui, os, random
 from constants import *
-from levels import CaveLevel, PymunkLevel, levels, spawn_points
+from levels import SpaceLevel, CaveLevel, PymunkLevel, levels, spawn_points
 from utils import PhysicsManager, SceneManager
 
 class Game:
@@ -525,9 +525,12 @@ class Game:
         self.physics = PhysicsManager()
 
         # Check if the level index is 3 or 4
-        if level_index in [3, 4]:
+        if level_index in [2, 3]:
             # Use CaveLevel if it is level 3 or 4
             self.level = CaveLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index])
+        elif level_index == 4:
+            # Use SpaceLevel for level 5
+            self.level = SpaceLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index])
         else:
             # Use PymunkLevel for all other levels
             self.level = PymunkLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index])
