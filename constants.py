@@ -13,5 +13,8 @@ pygame.mixer.init()
 pygame.font.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
+# flag image
 original_flag_image = pygame.image.load(os.path.join("assets", "world building", "flag.png")).convert_alpha()
 flag_image = pygame.transform.scale(original_flag_image, (62, 64))
+
+CURRENT_TRACK = None

@@ -33,234 +33,46 @@
             "text_shadow_offset": "0,0",
             "text_horiz_alignment": "center",
             "text_vert_alignment": "center",
-            "border_width": "0",
-            "shadow_width": "0",
-            "shape": "rectangle"
+            "border_width": "1",
+            "shadow_width": "2",
+            "shape": "rounded_rectangle",
+            "shape_corner_radius": "6"
         }
     },
     "button": {
         "colours": {
-            "normal_bg": "#00000000",
-            "hovered_bg": "#00000000",
-            "disabled_bg": "#00000000",
-            "selected_bg": "#00000000",
-            "active_bg": "#00000000",
-            "normal_border": "#00000000",
-            "hovered_border": "#00000000",
-            "disabled_border": "#00000000",
-            "selected_border": "#00000000",
-            "active_border": "#00000000"
+            "normal_bg": "#2a3050",
+            "hovered_bg": "#4a5070",
+            "disabled_bg": "#252830",
+            "selected_bg": "#193754",
+            "active_bg": "#193754",
+            "normal_text": "#c5cbd8",
+            "hovered_text": "#FFFFFF",
+            "selected_text": "#FFFFFF",
+            "disabled_text": "#6d736f",
+            "normal_border": "#5565a7",
+            "hovered_border": "#7585c7",
+            "disabled_border": "#555555",
+            "selected_border": "#8595d7",
+            "active_border": "#8595d7"
+        },
+        "font": {
+            "name": "daydream",
+            "size": "16",
+            "regular_path": "assets/Daydream.ttf"
         },
         "misc": {
-            "border_width": "0",
-            "shadow_width": "0"
+            "border_width": "2",
+            "shadow_width": "2",
+            "shape": "rounded_rectangle",
+            "shape_corner_radius": "6",
+            "text_horiz_alignment": "center",
+            "text_vert_alignment": "center",
+            "text_shadow": "1",
+            "text_shadow_size": "1",
+            "text_shadow_offset": "1,1"
         }
     },
-    
-    "#play_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/play.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/play.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Pplay.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/play.png"
-            }
-        }
-    },
-    
-    "#exit_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/exit.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/exit.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Pexit.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/exit.png"
-            }
-        }
-    },
-    
-    "#settings_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/settings.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/settings.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Psettings.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/settings.png"
-            }
-        }
-    },
-    
-    "#audio_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/audio.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/audio.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Paudio.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/audio.png"
-            }
-        }
-    },
-    
-    "#music_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/music.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/music.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Pmusic.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/music.png"
-            }
-        }
-    },
-    
-    "#mute_audio_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/mute audio.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/mute audio.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Pmute audio.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/mute audio.png"
-            }
-        }
-    },
-    
-    "#pause_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/pause.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/pause.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Ppause.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/pause.png"
-            }
-        }
-    },
-    
-    "#respawn_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/respawn.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/respawn.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Prespawn.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/respawn.png"
-            }
-        }
-    },
-    
-    "#return_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/return.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/return.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Preturn.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/return.png"
-            }
-        }
-    },
-    
-    "#accept_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/accept.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/accept.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Paccept.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/accept.png"
-            }
-        }
-    },
-    
-    "#cancel_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/cancel.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/cancel.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Pcancel.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/cancel.png"
-            }
-        }
-    },
-    
-    "#credits_button": {
-        "images": {
-            "normal_image": {
-                "path": "assets/sprites/buttons/unpressed/credits.png"
-            },
-            "hovered_image": {
-                "path": "assets/sprites/buttons/unpressed/credits.png"
-            },
-            "selected_image": {
-                "path": "assets/sprites/buttons/pressed/Pcredits.png"
-            },
-            "disabled_image": {
-                "path": "assets/sprites/buttons/unpressed/credits.png"
-            }
-        }
-    },
-    
     "text_box": {
         "font": {
             "name": "daydream",
@@ -269,10 +81,31 @@
         }
     },
     "label": {
+        "colours": {
+            "normal_text": "#c5cbd8",
+            "text_shadow": "#222222"
+        },
         "font": {
             "name": "daydream",
             "size": "14",
             "regular_path": "assets/Daydream.ttf"
+        },
+        "misc": {
+            "text_shadow": "1",
+            "text_shadow_size": "1",
+            "text_shadow_offset": "1,1"
+        }
+    },
+    "panel": {
+        "colours": {
+            "dark_bg": "#1c2030aa",
+            "normal_border": "#4a5070"
+        },
+        "misc": {
+            "border_width": "1",
+            "shadow_width": "2",
+            "shape": "rounded_rectangle",
+            "shape_corner_radius": "8"
         }
     },
     "drop_down_menu": {
@@ -291,7 +124,7 @@
     },
     "window_title": {
         "font": {
-            "name": "daydream", 
+            "name": "daydream",
             "size": "16",
             "regular_path": "assets/Daydream.ttf"
         }
@@ -301,6 +134,180 @@
             "name": "daydream",
             "size": "12",
             "regular_path": "assets/Daydream.ttf"
+        }
+    },
+    "#dialogue_panel": {
+        "colours": {
+            "dark_bg": "#000000D0",
+            "normal_border": "#FFFFFFEE"
+        },
+        "misc": {
+            "shape": "rounded_rectangle",
+            "shape_corner_radius": "8",
+            "border_width": "4",
+            "shadow_width": "5"
+        }
+    },
+    "#portrait_panel": {
+        "colours": {
+            "dark_bg": "#111111AA",
+            "normal_border": "#FFFFFF88"
+        },
+        "misc": {
+            "shape": "rounded_rectangle",
+            "shape_corner_radius": "5",
+            "border_width": "2",
+            "shadow_width": "1"
+        }
+    },
+    "#name_label": {
+        "colours": {
+            "normal_text": "#FFFF66",
+            "normal_bg": "#111111AA",
+            "dark_bg": "#111111AA"
+        },
+        "font": {
+            "size": "20",
+            "bold": "1"
+        },
+        "misc": {
+            "text_shadow": "1",
+            "text_shadow_size": "1",
+            "text_shadow_offset": "2,2",
+            "text_shadow_color": "#000000"
+        }
+    },
+    "#dialogue_text": {
+        "colours": {
+            "normal_text": "#FFFFFF",
+            "dark_bg": "#00000000",
+            "normal_border": "#00000000"
+        },
+        "font": {
+            "size": "18",
+            "name": "daydream",
+            "regular_path": "assets/Daydream.ttf"
+        },
+        "misc": {
+            "border_width": "0",
+            "text_shadow": "1",
+            "text_shadow_size": "1",
+            "text_shadow_offset": "1,1",
+            "text_shadow_color": "#000000",
+            "text_horiz_alignment": "left",
+            "text_vert_alignment": "top"
+        }
+    },
+    "#choice_panel": {
+        "colours": {
+            "dark_bg": "#000000CC",
+            "normal_border": "#FFFFFFBB"
+        },
+        "misc": {
+            "shape": "rounded_rectangle",
+            "shape_corner_radius": "8",
+            "border_width": "3",
+            "shadow_width": "4"
+        }
+    },
+    "#choice_button": {
+        "colours": {
+            "normal_bg": "#111144BB",
+            "hovered_bg": "#222288DD",
+            "disabled_bg": "#25292e",
+            "selected_bg": "#334499",
+            "active_bg": "#334499",
+            "dark_bg": "#15191e",
+            "normal_text": "#EEEEEE",
+            "hovered_text": "#FFFFFF",
+            "selected_text": "#FFFFFF",
+            "disabled_text": "#6d736f",
+            "active_text": "#FFFFFF",
+            "normal_border": "#8888FF",
+            "hovered_border": "#AAAAFF",
+            "disabled_border": "#808080",
+            "selected_border": "#FFFFFF",
+            "active_border": "#FFFFFF"
+        },
+        "misc": {
+            "shape": "rounded_rectangle",
+            "shape_corner_radius": "5",
+            "border_width": "2",
+            "shadow_width": "2"
+        }
+    },
+    "#title_label": {
+        "colours": {
+            "normal_text": "#E0E0FF",
+            "text_shadow": "#000000"
+        },
+        "font": {
+            "name": "daydream",
+            "size": "22",
+            "regular_path": "assets/Daydream.ttf"
+        },
+        "misc": {
+            "text_shadow": "1",
+            "text_shadow_size": "2",
+            "text_shadow_offset": "1,1"
+        }
+    },
+    "#level_button": {
+        "colours": {
+            "normal_bg": "#2a3050",
+            "hovered_bg": "#4a60a0",
+            "disabled_bg": "#252830",
+            "selected_bg": "#193754",
+            "active_bg": "#193754",
+            "normal_text": "#c5cbd8",
+            "hovered_text": "#FFFFFF",
+            "selected_text": "#FFFFFF",
+            "disabled_text": "#6d736f",
+            "normal_border": "#5565a7",
+            "hovered_border": "#7585c7",
+            "disabled_border": "#555555",
+            "selected_border": "#8595d7",
+            "active_border": "#8595d7"
+        },
+        "font": {
+            "name": "daydream",
+            "size": "18",
+            "regular_path": "assets/Daydream.ttf"
+        },
+        "misc": {
+            "border_width": "2",
+            "shadow_width": "2",
+            "shape": "rounded_rectangle",
+            "shape_corner_radius": "6"
+        }
+    },
+    "#main_menu_button": {
+        "colours": {
+            "normal_bg": "#2a3050",
+            "hovered_bg": "#4a60a0",
+            "disabled_bg": "#252830",
+            "selected_bg": "#193754",
+            "active_bg": "#193754",
+            "normal_text": "#c5cbd8",
+            "hovered_text": "#FFFFFF",
+            "selected_text": "#FFFFFF",
+            "disabled_text": "#6d736f",
+            "normal_border": "#5565a7",
+            "hovered_border": "#7585c7",
+            "disabled_border": "#555555",
+            "selected_border": "#8595d7",
+            "active_border": "#8595d7"
+        },
+        "font": {
+            "name": "daydream",
+            "size": "20",
+            "regular_path": "assets/Daydream.ttf"
+        },
+        "misc": {
+            "border_width": "2",
+            "shadow_width": "2",
+            "shape": "rounded_rectangle",
+            "shape_corner_radius": "6"
         }
     }
 }
