@@ -1,4 +1,7 @@
 # Red Ball Redux
+
+![title](https://github.com/user-attachments/assets/1bd14562-b3b7-41ca-9837-33b883ca8274)
+
 This was originally meant to be a Sonic game but since I couldn't figure out the physics behind Sonic, I decided to remake the original Red Ball by Evgeniy Fedoseev using the Pymunk physics package.
 
 Test your skills against the great foe that is PHYSICS! Help the ball reach the end across all five levels, avoiding giant chasms and sloppy architecture! This game utilises real world physics and the ball HATES it, so you are going to have a difficult time making it through all the levels without hitches along the way. Never fear, the end [of the level ;)] is always near! 
