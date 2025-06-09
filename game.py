@@ -94,7 +94,7 @@ class Game:
             "Tip: The loading screen always finishes eventually. Hang in there.",
             "Tip: If you're seeing this, you're not in the game. Weird.",
             "Tip: You can't win if you don't play. You also can't lose.",
-            "Tip: Secrets are hidden where you least expect... or sometimes right in front of you. Who knows.",
+            "Tip: Secrets are hidden where you least expect... or sometimes right in front of you. Who knows?",
             "Tip: Sound effects are 87% more satisfying when wearing headphones. This statistic is made up.",
             "Tip: The pause button pauses the game. Revolutionary.",
             "Tip: Reloading a game does not reload your ammo.",
@@ -102,10 +102,13 @@ class Game:
             "Tip: Press 'M' to open the map... if you've found one.",
             "Tip: Can't complete a level? Sometimes, speed is key. - JackSepticEye.",
             "Tip: You can reset the ball with 'R' — useful if you're stuck.",
-            "Tip: Look for glowing objects — they might be interactive.",
+            "Tip: Some objects can be interacted with by pressing 'E'. Don't worry, it's obvious which ones.",
             "Tip: You can toggle music and audio in the settings screen.",
             "Tip: Don't forget: maps only unlock when collected in-game.",
-            "Tip: Pressing 'ESC' brings up the main menu — it's also how you rage quit in style."
+            "Tip: Pressing 'ESC' brings up the main menu — it's also how you rage quit in style.",
+            "Tip: Game dev is hard. I made this in two weeks. Please don't hate me :(",
+            "Tip: If you find a bug, please report it. Not that I can fix it, but still.",
+            "Tip: There are no game saves yet, so don't get too attached to your progress."
         ]
         
         self._current_tip_index = 0
@@ -115,6 +118,8 @@ class Game:
         self._tip_fade_duration = 0.3  # Fade duration for tip transitions
         self._tip_fading = False
         self._tip_fade_timer = 0
+        self._shuffled_tips = random.sample(self._loading_tips, len(self._loading_tips))
+        self._current_tip_index = 0
 
     def _setup_loading_screen(self):
         """Setup loading screen animation with 4 frame loading icon"""
@@ -175,7 +180,7 @@ class Game:
                 elif self._tip_fade_timer <= self._tip_fade_duration * 2:
                     # Change tip at halfway point and fade in
                     if self._tip_fade_alpha <= 0:
-                        self._current_tip_index = (self._current_tip_index + 1) % len(self._loading_tips)
+                        self._current_tip_index = (self._current_tip_index + 1) % len(self._shuffled_tips)
                     
                     # Fade in
                     progress = (self._tip_fade_timer - self._tip_fade_duration) / self._tip_fade_duration
@@ -197,7 +202,7 @@ class Game:
             return
         
         # Get current tip
-        current_tip = self._loading_tips[self._current_tip_index]
+        current_tip = self._shuffled_tips[self._current_tip_index]
         
         # Create text surface with current alpha
         tip_color = (255, 255, 255, self._tip_fade_alpha)
@@ -1227,7 +1232,11 @@ class Game:
         min_display_time = 1.0  # Minimum display duration for loading screen
         loading_complete = False
         start_time = time.time()
-
+        self._shuffled_tips = random.sample(self._loading_tips, len(self._loading_tips))
+        self._current_tip_index = 0
+        self._tip_change_timer = 0
+        self._tip_fade_timer = 0
+        self._tip_fading = False
         # Run loading task in separate thread
         if loading_task:
             def thread_target():

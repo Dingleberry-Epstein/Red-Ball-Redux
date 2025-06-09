@@ -2600,10 +2600,6 @@ class BossArena(SpaceLevel):
 						pygame.mixer_music.play(-1)
 					except:
 						pass
-					# Show buttons in main menu
-					for name in ['audio', 'music']:
-						if name in self._game_ref.buttons:
-							self._game_ref.buttons[name].show()
 				return True
 			return True  # Consume all other events during credits
 			
