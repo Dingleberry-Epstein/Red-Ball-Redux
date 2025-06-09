@@ -1,4 +1,4 @@
-import pygame, pygame_gui, os, random, objects
+import pygame, pygame_gui, os, random, objects, threading, time
 from constants import *
 from levels import SpaceLevel, CaveLevel, PymunkLevel, levels, spawn_points, BossArena
 from utils import PhysicsManager, SceneManager, MapSystem
@@ -20,6 +20,7 @@ class Game:
         self._credits = None
         
         self._player_has_map = False
+        self._setup_loading_tips()
 
         # Set up physics and level
         self._physics = None
@@ -79,6 +80,241 @@ class Game:
         # Initialize map system
         self._map_system = MapSystem(self)
         self._map_key_pressed = False  # Track M key state to avoid repeat toggling
+
+        # Setup loading screen
+        self._setup_loading_screen()
+
+    def _setup_loading_tips(self):
+        """Setup loading tips system"""
+        self._loading_tips = [
+            "Tip: Holding the jump button makes you feel like you're jumping higher. It doesn't, but it feels like it.",
+            "Tip: Red balls are red. This is important. Probably.",
+            "Tip: Pressing random keys rapidly may not help, but it sure is exciting!",
+            "Tip: Always look both ways before crossing... in a 2D platformer.",
+            "Tip: The loading screen always finishes eventually. Hang in there.",
+            "Tip: If you're seeing this, you're not in the game. Weird.",
+            "Tip: You can't win if you don't play. You also can't lose.",
+            "Tip: Secrets are hidden where you least expect... or sometimes right in front of you. Who knows.",
+            "Tip: Sound effects are 87% more satisfying when wearing headphones. This statistic is made up.",
+            "Tip: The pause button pauses the game. Revolutionary.",
+            "Tip: Reloading a game does not reload your ammo.",
+            "Tip: The cake is... not relevant to this game, but we thought we'd say it anyway.",
+            "Tip: Press 'M' to open the map... if you've found one.",
+            "Tip: Can't complete a level? Sometimes, speed is key. - JackSepticEye.",
+            "Tip: You can reset the ball with 'R' — useful if you're stuck.",
+            "Tip: Look for glowing objects — they might be interactive.",
+            "Tip: You can toggle music and audio in the settings screen.",
+            "Tip: Don't forget: maps only unlock when collected in-game.",
+            "Tip: Pressing 'ESC' brings up the main menu — it's also how you rage quit in style."
+        ]
+        
+        self._current_tip_index = 0
+        self._tip_change_timer = 0
+        self._tip_change_interval = 2.0  # Change tip every 2 seconds
+        self._tip_fade_alpha = 255
+        self._tip_fade_duration = 0.3  # Fade duration for tip transitions
+        self._tip_fading = False
+        self._tip_fade_timer = 0
+
+    def _setup_loading_screen(self):
+        """Setup loading screen animation with 4 frame loading icon"""
+        self._loading_frames = []
+        self._loading_frame_index = 0
+        self._loading_animation_timer = 0
+        self._loading_animation_speed = 0.1  # Change frame every 0.1 seconds
+        self._show_loading = False
+        
+        # Try to load the 4 loading frames
+        for i in range(1, 5):  # Assuming files are named loading1.png, loading2.png, etc.
+            try:
+                frame_path = os.path.join("assets", "sprites", "loading screen", f"{i}.png")
+                frame = pygame.image.load(frame_path).convert_alpha()
+                self._loading_frames.append(frame)
+                print(f"Loaded loading frame: {frame_path}")
+            except pygame.error as e:
+                print(f"Could not load loading frame {frame_path}: {e}")
+                # Create a simple fallback loading frame
+                fallback_frame = pygame.Surface((32, 32), pygame.SRCALPHA)
+                # Create a simple rotating square pattern for each frame
+                color_intensity = 64 + (i * 48)  # Different intensity for each frame
+                pygame.draw.rect(fallback_frame, (color_intensity, color_intensity, color_intensity), 
+                               (8 + i*2, 8 + i*2, 16 - i*2, 16 - i*2))
+                self._loading_frames.append(fallback_frame)
+        
+        # If no frames were loaded, create simple fallback animation
+        if not self._loading_frames:
+            for i in range(4):
+                fallback_frame = pygame.Surface((32, 32), pygame.SRCALPHA)
+                color_intensity = 64 + (i * 48)
+                pygame.draw.circle(fallback_frame, (color_intensity, color_intensity, color_intensity), 
+                                 (16, 16), 12 - i*2)
+                self._loading_frames.append(fallback_frame)
+
+    def _update_loading_animation(self, dt):
+        """Update the loading animation frame and tips"""
+        if not self._show_loading or not self._loading_frames:
+            return
+            
+        # Update loading icon animation
+        self._loading_animation_timer += dt
+        if self._loading_animation_timer >= self._loading_animation_speed:
+            self._loading_animation_timer = 0
+            self._loading_frame_index = (self._loading_frame_index + 1) % len(self._loading_frames)
+        
+        # Update tip cycling
+        if hasattr(self, '_loading_tips') and self._loading_tips:
+            self._tip_change_timer += dt
+            
+            # Handle tip fading
+            if self._tip_fading:
+                self._tip_fade_timer += dt
+                if self._tip_fade_timer <= self._tip_fade_duration:
+                    # Fade out
+                    progress = self._tip_fade_timer / self._tip_fade_duration
+                    self._tip_fade_alpha = int(255 * (1 - progress))
+                elif self._tip_fade_timer <= self._tip_fade_duration * 2:
+                    # Change tip at halfway point and fade in
+                    if self._tip_fade_alpha <= 0:
+                        self._current_tip_index = (self._current_tip_index + 1) % len(self._loading_tips)
+                    
+                    # Fade in
+                    progress = (self._tip_fade_timer - self._tip_fade_duration) / self._tip_fade_duration
+                    self._tip_fade_alpha = int(255 * progress)
+                else:
+                    # Fade complete
+                    self._tip_fading = False
+                    self._tip_fade_timer = 0
+                    self._tip_fade_alpha = 255
+                    self._tip_change_timer = 0
+            elif self._tip_change_timer >= self._tip_change_interval:
+                # Start fading to next tip
+                self._tip_fading = True
+                self._tip_fade_timer = 0
+
+    def _draw_loading_tip(self):
+        """Draw the current loading tip with fade effects"""
+        if not hasattr(self, '_loading_tips') or not self._loading_tips:
+            return
+        
+        # Get current tip
+        current_tip = self._loading_tips[self._current_tip_index]
+        
+        # Create text surface with current alpha
+        tip_color = (255, 255, 255, self._tip_fade_alpha)
+        
+        # Word wrap the tip text for better display
+        words = current_tip.split(' ')
+        lines = []
+        current_line = []
+        max_width = SCREEN_WIDTH - 100  # Leave padding on sides
+        
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            text_width = self._small_font.size(test_line)[0]
+            
+            if text_width <= max_width:
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                    current_line = [word]
+                else:
+                    # Single word is too long, just add it
+                    lines.append(word)
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        # Calculate total height and starting position
+        line_height = self._small_font.get_height() + 5
+        total_height = len(lines) * line_height
+        start_y = SCREEN_HEIGHT // 2 - total_height // 2
+        
+        # Draw each line with fade effect
+        for i, line in enumerate(lines):
+            # Create text surface
+            text_surface = self._small_font.render(line, True, (255, 255, 255))
+            
+            # Apply alpha if fading
+            if self._tip_fade_alpha < 255:
+                # Create a surface with per-pixel alpha
+                faded_surface = pygame.Surface(text_surface.get_size(), pygame.SRCALPHA)
+                faded_surface.fill((255, 255, 255, self._tip_fade_alpha))
+                faded_surface.blit(text_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+                text_surface = faded_surface
+            
+            # Center the line horizontally
+            text_rect = text_surface.get_rect()
+            text_rect.centerx = SCREEN_WIDTH // 2
+            text_rect.y = start_y + (i * line_height)
+            
+            # Add subtle glow effect for better visibility
+            for offset in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
+                glow_surface = self._small_font.render(line, True, (50, 50, 50))
+                if self._tip_fade_alpha < 255:
+                    glow_faded = pygame.Surface(glow_surface.get_size(), pygame.SRCALPHA)
+                    glow_faded.fill((50, 50, 50, self._tip_fade_alpha // 3))
+                    glow_faded.blit(glow_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+                    glow_surface = glow_faded
+                
+                glow_rect = text_rect.copy()
+                glow_rect.x += offset[0]
+                glow_rect.y += offset[1]
+                self._screen.blit(glow_surface, glow_rect)
+            
+            # Draw the main text
+            self._screen.blit(text_surface, text_rect)
+
+    def _draw_loading_icon(self):
+        """Draw the loading icon and tips prominently on black screen"""
+        if not self._show_loading or not self._loading_frames:
+            return
+            
+        # Position in bottom right corner with padding
+        padding = 30
+        frame = self._loading_frames[self._loading_frame_index]
+        
+        # Scale the loading icon to be more visible
+        scaled_size = (64, 48)  # Even larger for black screen visibility
+        scaled_frame = pygame.transform.scale(frame, scaled_size)
+        
+        x = SCREEN_WIDTH - scaled_frame.get_width() - padding
+        y = SCREEN_HEIGHT - scaled_frame.get_height() - padding
+        
+        # Add a glowing effect for better visibility on black background
+        glow_surface = pygame.Surface((scaled_size[0] + 20, scaled_size[1] + 20), pygame.SRCALPHA)
+        
+        # Create multiple circles for glow effect
+        glow_center = (glow_surface.get_width() // 2, glow_surface.get_height() // 2)
+        for i in range(5):
+            alpha = 30 - (i * 5)  # Decreasing alpha for glow layers  
+            radius = (max(scaled_size) // 2) + (i * 3)
+            glow_color = (255, 255, 255, alpha)
+            pygame.draw.circle(glow_surface, glow_color, glow_center, radius)
+        
+        # Position glow
+        glow_x = x - 10
+        glow_y = y - 10
+        self._screen.blit(glow_surface, (glow_x, glow_y))
+        
+        # Draw the actual loading icon
+        self._screen.blit(scaled_frame, (x, y))
+        
+        # Add "Loading..." text with glow effect
+        loading_text = self._menu_font.render("Loading...", True, (255, 255, 255))
+        text_x = x - loading_text.get_width() - 20
+        text_y = y + (scaled_frame.get_height() // 2) - (loading_text.get_height() // 2)
+        
+        # Text glow effect
+        for offset in [(-2, -2), (-2, 0), (-2, 2), (0, -2), (0, 2), (2, -2), (2, 0), (2, 2)]:
+            glow_text = self._menu_font.render("Loading...", True, (100, 100, 100))
+            self._screen.blit(glow_text, (text_x + offset[0], text_y + offset[1]))
+        
+        # Main text
+        self._screen.blit(loading_text, (text_x, text_y))
+        
+        # Draw loading tips if available
+        self._draw_loading_tip()
 
     def _setup_reactive_background(self):
         """Load three background layers for a parallax effect based on mouse movement"""
@@ -355,6 +591,9 @@ class Game:
             global dt
             dt = self._clock.tick(60) / 1000.0  # Convert to seconds
 
+            # Update loading animation
+            self._update_loading_animation(dt)
+
             # Get events
             events = pygame.event.get()
             for event in events:
@@ -387,6 +626,9 @@ class Game:
             # Update and render based on state
             self._update_game_state(events, dt)
 
+            # Draw loading icon if it should be visible
+            self._draw_loading_icon()
+
             pygame.display.flip()
 
     def _handle_keydown_events(self, event):
@@ -404,27 +646,41 @@ class Game:
             self._level.reset_ball()
 
     def _handle_escape_key(self):
-        """Handle behavior when escape key is pressed"""
+        """Handle behavior when escape key is pressed with loading screen"""
         if self._map_system.is_open:
-            # Close map with escape key too
             self._map_system.toggle()
         elif self._state == "game":
             def render_game():
                 self.update(dt)
                 self.render()
+            
             def render_main_menu():
-                self.update_background()
+                self.update_background() 
                 self.render_main_menu()
 
-            SceneManager.fade_to_black(self._screen, render_game, self._fade_duration)
+            # 1. Fade to black
             pygame.mixer_music.fadeout(500)
-            self.handle_state_transition("main_menu")
+            SceneManager.fade_to_black(self._screen, render_game, self._fade_duration)
+            
+            # 2. Show loading screen while transitioning
+            self._show_loading = True
+            
+            def loading_task():
+                self.handle_state_transition("main_menu")
+            
+            self._draw_loading_screen_between_transitions(loading_task)
+            
+            # 3. Fade from black to main menu
+            self._show_loading = False
             SceneManager.fade_from_black(self._screen, render_main_menu, self._fade_duration)
+            
         elif self._state == "credits":
             self.handle_state_transition("main_menu")
         else:
-            self.update_background()
-            self.render_main_menu()
+            def render_main_menu():
+                self.update_background()
+                self.render_main_menu()
+            
             pygame.mixer_music.fadeout(900)
             SceneManager.fade_to_black(self._screen, render_main_menu, self._fade_duration)
             self._running = False
@@ -494,16 +750,12 @@ class Game:
 
         # Check if the level index is 3 or 4
         if level_index in [2, 3]:
-            # Use CaveLevel if it is level 3 or 4
             self._level = CaveLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index])
         elif level_index == 4:
-            # Use SpaceLevel for level 5
             self._level = SpaceLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index])
         elif level_index == 5:
-            # Use Boss Arena for level 5
             self._level = BossArena(tmx_map=levels[level_index], spawn=spawn_points[level_index])
         else:
-            # Use PymunkLevel for all other levels
             self._level = PymunkLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index])
 
         self._current_level_index = level_index  # Store current index.
@@ -541,24 +793,35 @@ class Game:
                 self._level_complete_timer = 0
 
     def _handle_level_complete(self, dt):
-        """Handle the level complete transition"""
+        """Handle the level complete transition with loading screen"""
         self._level_complete_timer += dt
         if self._level_complete_timer >= self._level_complete_delay:
             # Unlock boss level if completing level 5
-            if self._current_level_index == 4:  # Level indices are 0-based, so level 5 is index 4
+            if self._current_level_index == 4:
                 self._boss_level_unlocked = True
                 print("BOSS LEVEL UNLOCKED by completing level 5!")
-                
-            # Transition back to main menu after the delay
+            
             def render_game():
                 self.render()
+            
             def render_main_menu():
                 self.update_background()
                 self.render_main_menu()
 
+            # 1. Fade to black
             pygame.mixer_music.fadeout(500)
             SceneManager.fade_to_black(self._screen, render_game, self._fade_duration)
-            self.handle_state_transition("main_menu")
+            
+            # 2. Show loading screen
+            self._show_loading = True
+            
+            def loading_task():
+                self.handle_state_transition("main_menu")
+            
+            self._draw_loading_screen_between_transitions(loading_task)
+            
+            # 3. Fade from black to main menu
+            self._show_loading = False
             SceneManager.fade_from_black(self._screen, render_main_menu, self._fade_duration)
 
             # Reset completion flags
@@ -626,13 +889,10 @@ class Game:
             # Calculate position to center the text
             text_width = self._pixel_font.size(text)[0]
             text_x = SCREEN_WIDTH // 2 - text_width // 2
-            text_y = self._title_y_pos + self._title_text.get_height() + 30
-
-            # Render with outline
+            text_y = SCREEN_HEIGHT // 2 + 200  # Below the title
+            
+            # Draw the text with outline
             self.render_outlined_text(text, (255, 255, 255), (0, 0, 0), (text_x, text_y))
-
-    # PYGAME-GUI IMPROVED METHODS
-    
     def setup_main_menu(self):
         """Set up the main menu UI elements with pygame-gui"""
         # Clear any existing buttons
@@ -934,21 +1194,102 @@ class Game:
             pygame.mixer_music.play(-1)
 
     def start_level(self, level_index):
-        """Start the specified level with proper transitions"""
-        def render_game():
-            self.update(dt)
-            self.render()
+        """Start the specified level with loading screen between transitions"""
         def render_main_menu():
             self.update_background()
             self.render_main_menu()
 
-        pygame.mixer_music.fadeout(500)
+        def render_game():
+            self.update(dt)
+            self.render()
 
+        # 1. Fade to black from current state
+        pygame.mixer_music.fadeout(500)
         SceneManager.fade_to_black(self._screen, render_main_menu, self._fade_duration)
-        self.setup_game(level_index)
-        self.handle_state_transition("game")
+        
+        # 2. Show loading screen on black background while setting up game
+        self._show_loading = True
+        
+        def loading_task():
+            """The actual loading work"""
+            self.setup_game(level_index)
+            self.handle_state_transition("game")
+        
+        self._draw_loading_screen_between_transitions(loading_task)
+        
+        # 3. Fade from black to new game state
+        self._show_loading = False
         SceneManager.fade_from_black(self._screen, render_game, self._fade_duration)
         self.close_level_select()
+
+    def _draw_loading_screen_between_transitions(self, loading_task=None):
+        """Draw loading screen and run loading in background thread"""
+        min_display_time = 1.0  # Minimum display duration for loading screen
+        loading_complete = False
+        start_time = time.time()
+
+        # Run loading task in separate thread
+        if loading_task:
+            def thread_target():
+                loading_task()
+                nonlocal loading_complete
+                loading_complete = True
+
+            loading_thread = threading.Thread(target=thread_target)
+            loading_thread.start()
+        else:
+            loading_complete = True
+
+        # Main loop to keep animating while loading
+        while True:
+            current_time = time.time()
+            elapsed = current_time - start_time
+
+            # Handle window close event
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self._running = False
+                    return
+
+            # Update loading animation
+            dt = self._clock.tick(60) / 1000.0
+            self._update_loading_animation(dt)
+
+            # Draw loading screen
+            self._screen.fill((0, 0, 0))
+            self._draw_loading_icon()
+            pygame.display.flip()
+
+            # Exit loop once both loading is done and min time has passed
+            if loading_complete and elapsed >= min_display_time:
+                break
+
+        # Ensure thread is done
+        if loading_task:
+            loading_thread.join()
+
+    def _show_loading_screen_with_minimum_time(self, min_time=0.5):
+        """Show loading screen on black background for minimum time while loading occurs"""
+        import time
+        
+        loading_start_time = time.time()
+        
+        # Keep showing loading screen until minimum time has passed
+        while time.time() - loading_start_time < min_time:
+            # Handle events to prevent freezing
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self._running = False
+                    return
+            
+            # Update loading animation
+            dt = self._clock.tick(60) / 1000.0
+            self._update_loading_animation(dt)
+            
+            # Draw pure black screen with loading icon
+            self._screen.fill((0, 0, 0))
+            self._draw_loading_icon()
+            pygame.display.flip()
 
 if __name__ == "__main__":
     Game().run()

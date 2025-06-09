@@ -2115,10 +2115,6 @@ class BossArena(SpaceLevel):
 						pygame.mixer_music.play(-1)
 					except:
 						pass
-					# Show buttons in main menu
-					for name in ['audio', 'music']:
-						if name in self._game_ref.buttons:
-							self._game_ref.buttons[name].show()
 			
 			return
 
@@ -2262,6 +2258,8 @@ class BossArena(SpaceLevel):
 		"""Update core gameplay elements"""
 		# Update rocket launchers with player, keys, and dt
 		keys = pygame.key.get_pressed()
+		if keys[pygame.K_F11]:
+			self.boss.health = 0  # For testing purposes, set boss health to 0
 		for launcher in self._rocket_launchers:
 			launcher.update(dt, self._ball, keys)
 		
