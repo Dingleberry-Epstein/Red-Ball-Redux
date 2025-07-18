@@ -323,7 +323,7 @@
     <property name="NPC" type="bool" value="true"/>
     <property name="NPCName" value="Pro Tip"/>
     <property name="NPCType" value="sign"/>
-    <property name="SignMessage" value="There's somebody down here. I'd suggest you talk to them, they could help you out. &quot;Who is this mysterious fellow?&quot; you may be asking. Gee, I don't know! I'm just a sign! Find him yourself..."/>
+    <property name="SignMessage" value="Somebody awaits your arrival. Find him, and you WON'T be in a world of pain later."/>
    </properties>
   </tile>
   <tile id="317">

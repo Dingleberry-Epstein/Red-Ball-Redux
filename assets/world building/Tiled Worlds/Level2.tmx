@@ -330,7 +330,7 @@
     <property name="NPC" type="bool" value="true"/>
     <property name="NPCName" value="Pro Tip #3"/>
     <property name="NPCType" value="sign"/>
-    <property name="SignMessage" value="Sometimes, you just gotta take it easy. Speed isn't always key, so remember to slow down for precise jumps (and to prevent breaking the physics engine. No, seriously, please don't overspeed - it can cause the physics engine to crap itself!!)"/>
+    <property name="SignMessage" value="Speed may be key, but precision is bliss."/>
    </properties>
   </tile>
   <tile id="317">
@@ -346,7 +346,7 @@
     <property name="NPC" type="bool" value="true"/>
     <property name="NPCName" value="Pro Tip"/>
     <property name="NPCType" value="sign"/>
-    <property name="SignMessage" value="Jumping in this game is kinda weird. You can jump mid air so long as you don't jump beforehand. Try rolling off the ramp ahead and then jumping while airborne! (Oh and important note, you need to recharge your jump to use it again! To recharge, simply land on top of a flat tile. NOT A SLOPED ONE! Sloped ones WILL NOT RECHARGE YOUR JUMP!!)"/>
+    <property name="SignMessage" value="You can jump whenever, even mid-air, so long as your jump is charged. Recharge by landing on a FLAT TILE."/>
    </properties>
   </tile>
   <tile id="319">

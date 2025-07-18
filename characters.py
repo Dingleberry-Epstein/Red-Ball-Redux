@@ -28,10 +28,10 @@ class PurePymunkBall(pygame.sprite.Sprite):
 		self._prev_velocity_y = 0
 		
 		# Add velocity callback to dampen only true bounces
-		self._physics.space.add_collision_handler(
+		self._physics.space.on_collision(
 			self._physics.collision_types["ball"], 
 			self._physics.collision_types["ground"]
-		).post_solve = self._handle_collision
+		)
 		
 		self._jumped = False
 
@@ -1161,7 +1161,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
 	def setup_collision_handlers(self):
 		"""Set up collision handlers for boss-specific interactions"""
 		# Boss vs Ball collision - for squishing the player
-		boss_ball_handler = self._physics.space.add_collision_handler(
+		boss_ball_handler = self._physics.space.on_collision(
 			self._physics.collision_types["boss"], 
 			self._physics.collision_types.get("ball", 1)  # Default to 1 if not defined
 		)
@@ -1175,7 +1175,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
 		
 		# Boss vs Ground collision - for landing detection
 		if "ground" in self._physics.collision_types:
-			boss_ground_handler = self._physics.space.add_collision_handler(
+			boss_ground_handler = self._physics.space.on_collision(
 				self._physics.collision_types["boss"], 
 				self._physics.collision_types["ground"]
 			)
@@ -1183,7 +1183,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
 		# Boss vs Launcher collision - destroy launchers on contact
 		if "launcher" not in self._physics.collision_types:
 			self._physics.collision_types["launcher"] = 6  # Assign a unique collision type for launchers
-		boss_launcher_handler = self._physics.space.add_collision_handler(
+		boss_launcher_handler = self._physics.space.on_collision(
 			self._physics.collision_types["boss"],
 			self._physics.collision_types["launcher"]
 		)

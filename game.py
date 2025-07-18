@@ -65,7 +65,7 @@ class Game:
         self._fade_duration = 1.0  # 1 second for fades
 
         # Load logo
-        self._logo_image = pygame.image.load(os.path.join("assets", "migglesoft.png")).convert_alpha()
+        self._logo_image = pygame.image.load(os.path.join("assets", "Migglesoft.png")).convert_alpha()
 
         # Load title once to reuse
         self._title_text = pygame.image.load(os.path.join("assets", "title.png")).convert_alpha()
@@ -92,21 +92,21 @@ class Game:
             "Tip: Pressing random keys rapidly may not help, but it sure is exciting!",
             "Tip: Always look both ways before crossing... in a 2D platformer.",
             "Tip: The loading screen always finishes eventually. Hang in there.",
-            "Tip: If you're seeing this, you're not in the game. Weird.",
+            "Tip: If you're seeing this, you're not in the game.",
             "Tip: You can't win if you don't play. You also can't lose.",
             "Tip: Secrets are hidden where you least expect... or sometimes right in front of you. Who knows?",
             "Tip: Sound effects are 87% more satisfying when wearing headphones. This statistic is made up.",
-            "Tip: The pause button pauses the game. Revolutionary.",
+            "Tip: The pause button should pause the game. Too bad the game doesn't have one.",
             "Tip: Reloading a game does not reload your ammo.",
             "Tip: The cake is... not relevant to this game, but we thought we'd say it anyway.",
             "Tip: Press 'M' to open the map... if you've found one.",
             "Tip: Can't complete a level? Sometimes, speed is key. - JackSepticEye.",
             "Tip: You can reset the ball with 'R' — useful if you're stuck.",
             "Tip: Some objects can be interacted with by pressing 'E'. Don't worry, it's obvious which ones.",
-            "Tip: You can toggle music and audio in the settings screen.",
+            "Tip: You can toggle music and audio in the settings screen, once I've added it.",
             "Tip: Don't forget: maps only unlock when collected in-game.",
-            "Tip: Pressing 'ESC' brings up the main menu — it's also how you rage quit in style.",
-            "Tip: Game dev is hard. I made this in two weeks. Please don't hate me :(",
+            "Tip: Pressing 'ESC' does not bring up the main menu — it's how you rage quit in style.",
+            "Tip: Game dev is hard. I made this in two weeks.",
             "Tip: If you find a bug, please report it. Not that I can fix it, but still.",
             "Tip: There are no game saves yet, so don't get too attached to your progress."
         ]
@@ -114,12 +114,11 @@ class Game:
         self._current_tip_index = 0
         self._tip_change_timer = 0
         self._tip_change_interval = 2.0  # Change tip every 2 seconds
-        self._tip_fade_alpha = 255
+        self._tip_fade_alpha = 0
         self._tip_fade_duration = 0.3  # Fade duration for tip transitions
         self._tip_fading = False
         self._tip_fade_timer = 0
         self._shuffled_tips = random.sample(self._loading_tips, len(self._loading_tips))
-        self._current_tip_index = 0
 
     def _setup_loading_screen(self):
         """Setup loading screen animation with 4 frame loading icon"""
@@ -179,8 +178,9 @@ class Game:
                     self._tip_fade_alpha = int(255 * (1 - progress))
                 elif self._tip_fade_timer <= self._tip_fade_duration * 2:
                     # Change tip at halfway point and fade in
-                    if self._tip_fade_alpha <= 0:
-                        self._current_tip_index = (self._current_tip_index + 1) % len(self._shuffled_tips)
+                    if self._tip_fade_alpha == 0:
+                        self._current_tip_index = random.randint(0, len(self._shuffled_tips) - 1)
+                        print(f"Changing loading tip to index: {self._current_tip_index}")
                     
                     # Fade in
                     progress = (self._tip_fade_timer - self._tip_fade_duration) / self._tip_fade_duration
@@ -1233,7 +1233,7 @@ class Game:
         loading_complete = False
         start_time = time.time()
         self._shuffled_tips = random.sample(self._loading_tips, len(self._loading_tips))
-        self._current_tip_index = 0
+        self._current_tip_index = random.randint(0, len(self._shuffled_tips) - 1)
         self._tip_change_timer = 0
         self._tip_fade_timer = 0
         self._tip_fading = False

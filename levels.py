@@ -1,4 +1,4 @@
-import pygame, pytmx, os, random, math
+import pygame, pytmx, os, random, math, time
 from constants import *
 from utils import PhysicsManager, ParallaxBackground, DialogueSystem
 from characters import PurePymunkBall, NPCCharacter, BlueBall, SignNPC, Cubodeez_The_Almighty_Cube as cb
@@ -31,7 +31,6 @@ class PymunkLevel:
 		self._ball = PurePymunkBall(self._physics, x, y)
 		self._camera = Camera(2000, 2000)  # Default size, will be updated when map loads
 		self._game_ref = None  # Reference to the game object, if needed
-
 		# Initialize dialogue system
 		self._setup_dialogue_system()
 		
@@ -2421,7 +2420,7 @@ class BossArena(SpaceLevel):
 		# Cache help text for better performance
 		if not self._help_text_surf:
 			try:
-				font = pygame.font.Font(os.path.join("assets", "Daydream.ttf"), 18)
+				font = pygame.font.Font(os.path.join("assets", "Daydream.ttf"), 16)
 			except:
 				font = pygame.font.SysFont(None, 24)
 				

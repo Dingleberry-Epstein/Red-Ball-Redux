@@ -325,6 +325,10 @@ class SceneManager:
 		pygame.display.flip()
 		return True
 
+import pymunk
+import pygame
+import math
+
 class PhysicsManager:
 	"""Physics manager with improved collision detection for switches"""
 
@@ -347,20 +351,22 @@ class PhysicsManager:
 		self._level_width = None
 		self._level_height = None
 
-		# Set up collision handler for ground detection
-		ground_handler = self._space.add_collision_handler(
-			self._collision_types["ball"], self._collision_types["ground"]
+		# Set up collision handler for ground detection using new Pymunk 7.1 API
+		self._space.on_collision(
+			self._collision_types["ball"], 
+			self._collision_types["ground"],
+			begin=self._on_ground_begin,
+			separate=self._on_ground_separate,
+			pre_solve=self._on_ground_pre_solve
 		)
-		ground_handler.begin = self._on_ground_begin
-		ground_handler.separate = self._on_ground_separate
-		ground_handler.pre_solve = self._on_ground_pre_solve
 		
-		# Set up collision handler for switches
-		switch_handler = self._space.add_collision_handler(
-			self._collision_types["ball"], self._collision_types["switch"]
+		# Set up collision handler for switches using new Pymunk 7.1 API
+		self._space.on_collision(
+			self._collision_types["ball"], 
+			self._collision_types["switch"],
+			begin=self._on_switch_begin,
+			separate=self._on_switch_separate
 		)
-		switch_handler.begin = self._on_switch_begin
-		switch_handler.separate = self._on_switch_separate
 
 	@property
 	def space(self):
@@ -403,27 +409,31 @@ class PhysicsManager:
 		n = arbiter.contact_point_set.normal
 		if n.y < -0.7:  # If normal is pointing mostly upward
 			self._player_grounded = True
-		return True  # Always let normal physics handle the collision
+		# In Pymunk 7.1, we don't return a bool to control processing
+		# Instead we use arbiter.process_collision property if needed
+		# For normal collision processing, we just don't set it to False
 
 	def _on_ground_pre_solve(self, arbiter, space, data):
 		"""Keep updating grounded status during continuous contact"""
 		n = arbiter.contact_point_set.normal
 		if n.y < -0.7:  # If normal is pointing mostly upward
 			self._player_grounded = True
-		return True
+		# No return value needed in Pymunk 7.1
 
 	def _on_ground_separate(self, arbiter, space, data):
 		"""Simple ground detection - just clears a flag"""
 		self._player_grounded = False
-		return True  # Always let normal physics handle the collision
+		# No return value needed in Pymunk 7.1
 		
 	def _on_switch_begin(self, arbiter, space, data):
 		"""Handle collision with switch - no physical collision effect"""
-		return True  # Let physics handle the collision normally
+		# No return value needed in Pymunk 7.1
+		pass
 		
 	def _on_switch_separate(self, arbiter, space, data):
 		"""Handle separation from switch"""
-		return True  # Let physics handle the separation normally
+		# No return value needed in Pymunk 7.1
+		pass
 
 	def is_grounded(self):
 		"""Return whether the player is on the ground"""
@@ -436,7 +446,7 @@ class PhysicsManager:
 			if s1 == shape1:
 				for s2 in self._space.shapes:
 					if s2 == shape2:
-						return self._space.shape_query(s1, pymunk.Transform.identity)
+						return self._space.shape_query(s1, pymunk.Transform.identity())
 		return False
 
 	def create_box(self, x, y, width, height, friction=0.9, is_static=True, collision_type=None):
@@ -508,6 +518,7 @@ class PhysicsManager:
 
 	def clear(self):
 		"""Remove all physics objects"""
+		# In Pymunk 7.1, we need to convert to list since space.bodies/shapes now return KeysView
 		for body in list(self._space.bodies):
 			self._space.remove(body)
 
