@@ -1,6 +1,7 @@
 # Red Ball Redux
 
-![title](https://github.com/user-attachments/assets/1bd14562-b3b7-41ca-9837-33b883ca8274)
+<img src= "https://github.com/user-attachments/assets/1bd14562-b3b7-41ca-9837-33b883ca8274" width=150% height=150%>
+
 
 This was originally meant to be a Sonic game but since I couldn't figure out the physics behind Sonic, I decided to remake the original Red Ball by Evgeniy Fedoseev using the Pymunk physics package.
 
