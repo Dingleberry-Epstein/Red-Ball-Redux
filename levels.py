@@ -1,4 +1,4 @@
-import pygame, pytmx, os, random, math, time
+import pygame, pytmx, os, random, math, time, threading
 from constants import *
 from utils import PhysicsManager, ParallaxBackground, DialogueSystem
 from characters import PurePymunkBall, NPCCharacter, BlueBall, SignNPC, Cubodeez_The_Almighty_Cube as cb
@@ -37,6 +37,10 @@ class PymunkLevel:
 		# Play level music
 		if play_music:
 			self._setup_music()
+		
+		self._music_switched = False  # Track if music has been switched
+		self._music_switching = False  # New flag to prevent multiple switches
+		self._pending_track = None     # Track to load after fadeout
 
 		# Set up parallax background
 		self._setup_parallax_background()
@@ -51,6 +55,7 @@ class PymunkLevel:
 		self._visual_tiles = pygame.sprite.Group()  # Keep this for compatibility
 		self._mask_switch_triggers = []
 		self._finish_tiles = []  # Store finish line tiles
+		self._music_switch_tiles = []
 		self._switch_used = False
 		self._level_complete = False  # Track if level is complete
 		self._checkpoints = []  # List of checkpoints
@@ -248,6 +253,7 @@ class PymunkLevel:
 		self._static_shapes = []
 		self._mask_switch_triggers = []
 		self._finish_tiles = []
+		self._music_switch_tiles = []
 		self.NPCs = pygame.sprite.Group()
 		
 		# Clear spatial grid
@@ -375,6 +381,11 @@ class PymunkLevel:
 			# Add to npc_tiles list for initialization later
 			self.npc_tiles.append(visual_tile)
 			print(f"Found NPC tile: {visual_tile.npc_type} at ({world_x}, {world_y})")
+		
+		if properties and properties.get('music switch', False):
+			# Store music switch tile
+			self._music_switch_tiles.append(visual_tile)
+			print(f"Music switch tile created at ({world_x}, {world_y})")
 
 	def _process_object_layers(self):
 		"""Process the TiledObjectGroup layers for direct object placement"""
@@ -1024,6 +1035,61 @@ class PymunkLevel:
 				return True
 
 		return False
+	
+	def check_music_switch(self, track):
+		"""Check if player has reached a music switch tile"""
+		if not self._music_switch_tiles or self._music_switched or self._music_switching:
+			return False
+		
+		ball_rect = self._ball.rect
+		
+		# Check collision with any music switch tile
+		for tile in self._music_switch_tiles:
+			if ball_rect.colliderect(tile.rect):
+				print(f"Music switch activated at {tile.rect.x}, {tile.rect.y}")
+				self._start_music_transition(track)
+				return True
+		
+		return False
+
+	def _start_music_transition(self, new_track):
+		"""Start the music transition process"""
+		if self._music_switching:
+			return
+		
+		self._music_switching = True
+		self._pending_track = new_track
+		
+		# Start fadeout and schedule the music switch
+		pygame.mixer.music.fadeout(500)  # Fade out over 1 second
+		
+		# Start a thread to handle the music switching after fadeout
+		switch_thread = threading.Thread(target=self._handle_music_switch)
+		switch_thread.daemon = True  # Dies when main thread dies
+		switch_thread.start()
+
+	def _handle_music_switch(self):
+		"""Handle the actual music switching after fadeout (runs in separate thread)"""
+		
+		# Check if music is still playing (fadeout might not be complete)
+		while pygame.mixer.music.get_busy():
+			time.sleep(0.1)
+		
+		try:
+			# Load and play new music
+			pygame.mixer.music.load(self._pending_track)
+			pygame.mixer.music.play(-1)  # Loop the new track
+			print(f"Successfully switched to: {self._pending_track}")
+			
+			# Mark as switched
+			self._music_switched = True
+			
+		except pygame.error as e:
+			print(f"Error switching music: {e}")
+		
+		finally:
+			self._music_switching = False
+			self._pending_track = None
 
 	def reset_ball(self):
 		"""Reset the ball to the last checkpoint or spawn point"""
@@ -1147,16 +1213,8 @@ class CaveLevel(PymunkLevel):
 	
 	def _setup_cave_music(self):
 		"""Set up cave-specific music"""
-		try:
-			pygame.mixer_music.load(os.path.join("assets", "music", "cave.mp3"))
-			global CURRENT_TRACK
-			CURRENT_TRACK = 'cave'
-			pygame.mixer_music.play(-1)
-		except:
-			# If cave music doesn't exist, keep the current music
-			print("Cave music not found, keeping current track")
-			pygame.mixer_music.load(os.path.join("assets", "music", "level 1.mp3"))
-			pygame.mixer_music.play(-1)
+		pygame.mixer_music.load(os.path.join("assets", "music", "level 1.mp3"))
+		pygame.mixer_music.play(-1)
 	
 	def _setup_cave_background(self):
 		"""Set up cave-themed parallax background"""
@@ -1206,7 +1264,9 @@ class CaveLevel(PymunkLevel):
 			SCREEN_WIDTH, 
 			SCREEN_HEIGHT
 		)
-		
+
+		self.check_music_switch(os.path.join("assets", "music", "cave.mp3"))
+
 		# Expand viewport by buffer to prevent pop-in at edges
 		buffered_viewport = viewport.inflate(self._viewport_buffer * 2, self._viewport_buffer * 2)
 		
@@ -1496,7 +1556,7 @@ class BossArena(SpaceLevel):
 		self._help_text_surf = None  # Cache help text surface
 		self._boss_name_surf = None  # Cache boss name text
 		self._cached_health_width = -1  # For health bar optimization
-		
+		self._player_defeat_sound = None
 		# Player death handling for game over screen
 		self._setup_player_death_handling()
 		
@@ -1551,19 +1611,17 @@ class BossArena(SpaceLevel):
 					pygame.mixer_music.play(-1)
 				except:
 					print("Failed to load any boss music")
+		self._player_defeat_sound = os.path.join("assets", "music", "game over.mp3")
 	
 	def _load_sound_effects(self):
 		"""Load boss-related sound effects"""
 		try:
 			self._boss_intro_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "boss_intro.mp3"))
 			self._boss_defeat_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "boss_defeat.mp3"))
-			self._player_defeat_sound = pygame.mixer.Sound(os.path.join("assets", "sounds", "explosion.mp3"))
-			self._player_defeat_sound.set_volume(1.0)
 		except:
 			print("Could not load boss sound effects")
 			self._boss_intro_sound = None
 			self._boss_defeat_sound = None
-			self._player_defeat_sound = None
 	
 	def _setup_arrow_indicator(self):
 		"""Set up the arrow indicator for the boss"""
@@ -1612,7 +1670,7 @@ class BossArena(SpaceLevel):
 		
 		# Fade effect for game over screen
 		self._game_over_fade_alpha = 0  # Start at 0 (transparent)
-		self._game_over_fade_speed = 120  # Alpha units per second
+		self._game_over_fade_speed = 255  # Alpha units per second
 		self._game_over_buttons_ready = False
 		
 		# NEW: Auto-return to menu after game over
@@ -1661,9 +1719,10 @@ class BossArena(SpaceLevel):
 				boss_arena._game_over_timer = 0.0  # Reset the auto-return timer
 				
 				# Play death sound if available
-				if hasattr(boss_arena, '_player_defeat_sound') and boss_arena._player_defeat_sound:
-					boss_arena._player_defeat_sound.play()
-				
+				pygame.mixer_music.stop()
+				pygame.mixer_music.load(os.path.join("assets", "music", "game over.mp3"))
+				pygame.mixer_music.play()  
+
 				print("Player killed by Cubodeez - showing game over screen")
 				
 			# Replace the death method
@@ -2236,22 +2295,6 @@ class BossArena(SpaceLevel):
 				
 			# Update the auto-return timer
 			self._game_over_timer += dt
-			if self._game_over_timer >= self._game_over_delay:
-				print("Game over delay complete - returning to main menu")
-				# Signal to the game to return to main menu
-				if hasattr(self, '_game_ref') and self._game_ref:
-					# Fade out music
-					pygame.mixer_music.fadeout(500)
-					# Set state to main menu
-					self._game_ref.state = "main_menu"
-					# Play menu music
-					try:
-						pygame.mixer_music.load(os.path.join("assets", "music", "theme.mp3"))
-						global CURRENT_TRACK
-						CURRENT_TRACK = 'menu'
-						pygame.mixer_music.play(-1)
-					except:
-						pass
 	
 	def _update_gameplay(self, dt):
 		"""Update core gameplay elements"""
@@ -2295,8 +2338,6 @@ class BossArena(SpaceLevel):
 			if hasattr(self._ball, 'death') and not self._ball.is_dead:
 				print("Direct squish detection in update method!")
 				self._ball.death()
-				if self._boss._squish_sound:
-					self._boss._squish_sound.play()
 		
 		# Add direct collision check with player for better detection
 		if self._boss._jumping and self._boss.body.velocity.y > 200:
@@ -2614,50 +2655,6 @@ class BossArena(SpaceLevel):
 		handled = super().handle_events(event)
 		return handled
 	
-	def _handle_game_over_events(self, event):
-		"""Handle events for the game over screen"""
-		# Only process clicks when fully faded in
-		if self._game_over_fade_alpha >= 200:
-			if event.type == pygame.MOUSEMOTION:
-				# Update button hover states
-				mouse_pos = event.pos
-				self._button_hover["retry"] = self._retry_button_rect.collidepoint(mouse_pos)
-				self._button_hover["menu"] = self._menu_button_rect.collidepoint(mouse_pos)
-			
-			elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left click
-				mouse_pos = event.pos
-				
-				# Check if retry button was clicked
-				if self._retry_button_rect.collidepoint(mouse_pos):
-					print("Retry button clicked - resetting level")
-					self.reset_level()
-					return True
-				
-				# Check if menu button was clicked
-				elif self._menu_button_rect.collidepoint(mouse_pos):
-					print("Menu button clicked - returning to main menu")
-					# Signal to the game to return to main menu
-					if hasattr(self, '_game_ref') and self._game_ref:
-						# Fade out music
-						pygame.mixer_music.fadeout(500)
-						# Set state to main menu
-						self._game_ref.state = "main_menu"
-						# Play menu music
-						try:
-							pygame.mixer_music.load(os.path.join("assets", "music", "theme.mp3"))
-							CURRENT_TRACK = 'menu'
-							pygame.mixer_music.play(-1)
-						except:
-							pass
-						# Show buttons in main menu
-						for name in ['audio', 'music']:
-							if name in self._game_ref.buttons:
-								self._game_ref.buttons[name].show()
-					return True
-		
-		# All events are consumed by game over screen when active
-		return True
-	
 	def _check_boss_player_collision(self):
 		"""Check for direct collision between boss and player"""
 		if not self._boss or not self._boss_active or not self._ball:
@@ -2725,10 +2722,6 @@ class BossArena(SpaceLevel):
 							pygame.mixer_music.play(-1)
 						except:
 							pass
-						# Show buttons in main menu
-						for name in ['audio', 'music']:
-							if name in self._game_ref.buttons:
-								self._game_ref.buttons[name].show()
 					return True
 		
 		# All events are consumed by game over screen when active

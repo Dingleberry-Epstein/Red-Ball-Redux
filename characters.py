@@ -1160,34 +1160,37 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
 	
 	def setup_collision_handlers(self):
 		"""Set up collision handlers for boss-specific interactions"""
+		
 		# Boss vs Ball collision - for squishing the player
-		boss_ball_handler = self._physics.space.on_collision(
-			self._physics.collision_types["boss"], 
-			self._physics.collision_types.get("ball", 1)  # Default to 1 if not defined
+		self._physics.space.on_collision(
+			collision_type_a=self._physics.collision_types["boss"], 
+			collision_type_b=self._physics.collision_types.get("ball", 1),  # Default to 1 if not defined
+			begin=self.on_hit_player,  # Your callback function
+			# pre_solve=None,  # Optional: add if needed
+			# post_solve=None,  # Optional: add if needed
+			# separate=None,   # Optional: add if needed
+			# data=None        # Optional: add if needed
 		)
-		boss_ball_handler.begin = self.on_hit_player
 		
-		# Add this print to verify the handler is registered
 		print(f"Boss collision handler registered: boss type = {self._physics.collision_types['boss']}, ball type = {self._physics.collision_types.get('ball', 1)}")
-		
-		# Also add a pre-solve handler which might catch some collisions that begin doesn't
-		boss_ball_handler.pre_solve = self.on_hit_player
 		
 		# Boss vs Ground collision - for landing detection
 		if "ground" in self._physics.collision_types:
-			boss_ground_handler = self._physics.space.on_collision(
-				self._physics.collision_types["boss"], 
-				self._physics.collision_types["ground"]
+			self._physics.space.on_collision(
+				collision_type_a=self._physics.collision_types["boss"], 
+				collision_type_b=self._physics.collision_types["ground"],
+				begin=self.on_hit_ground  # Your callback function
 			)
-			boss_ground_handler.begin = self.on_hit_ground
+		
 		# Boss vs Launcher collision - destroy launchers on contact
 		if "launcher" not in self._physics.collision_types:
 			self._physics.collision_types["launcher"] = 6  # Assign a unique collision type for launchers
-		boss_launcher_handler = self._physics.space.on_collision(
-			self._physics.collision_types["boss"],
-			self._physics.collision_types["launcher"]
+		
+		self._physics.space.on_collision(
+			collision_type_a=self._physics.collision_types["boss"],
+			collision_type_b=self._physics.collision_types["launcher"],
+			begin=self.on_hit_launcher  # Your callback function
 		)
-		boss_launcher_handler.begin = self.on_hit_launcher
 
 	def on_hit_player(self, arbiter, space, data):
 		"""Kill the player any time they touch Cubodeez"""
@@ -1199,10 +1202,6 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
 		# Kill the player immediately upon any contact
 		if hasattr(self._target, 'death') and not (hasattr(self._target, 'is_dead') and self._target.is_dead):
 			self._target.death()
-			
-			# Play squish sound
-			if self._squish_sound:
-				self._squish_sound.play()
 			
 			# Add visual/sound effects for impact
 			self.shake_screen(0.5, 10)
@@ -1814,8 +1813,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
 			if hasattr(self._target, 'death') and not (hasattr(self._target, 'is_dead') and self._target.is_dead):
 				print("Direct squish detection in update method!")
 				self._target.death()
-				if self._squish_sound:
-					self._squish_sound.play()
+				pass
 			
 		# Add direct collision check with player for better detection
 		if self._jumping and self._body.velocity.y > 200 and self._target:

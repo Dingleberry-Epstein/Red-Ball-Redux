@@ -37,7 +37,7 @@ class Game:
         )
         
         # Add secret code variables
-        self._secret_code = "CUBODEEZ"
+        self._secret_code = "KFC"
         self._current_input = ""
         self._boss_level_unlocked = False
 
@@ -71,6 +71,7 @@ class Game:
         self._title_text = pygame.image.load(os.path.join("assets", "title.png")).convert_alpha()
 
         pygame.display.set_caption("Red Ball: REDUX!")
+        pygame.display.set_icon(pygame.image.load(os.path.join("assets", "sprites", "Red Ball portrait.png")).convert_alpha())
 
         # Add variables for flashing text
         self._flash_timer = 0
@@ -111,14 +112,14 @@ class Game:
             "Tip: There are no game saves yet, so don't get too attached to your progress."
         ]
         
-        self._current_tip_index = 0
+        # Pick initial random tip
+        self._current_tip = random.choice(self._loading_tips)
         self._tip_change_timer = 0
         self._tip_change_interval = 2.0  # Change tip every 2 seconds
-        self._tip_fade_alpha = 0
+        self._tip_fade_alpha = 255  # Start fully visible
         self._tip_fade_duration = 0.3  # Fade duration for tip transitions
         self._tip_fading = False
         self._tip_fade_timer = 0
-        self._shuffled_tips = random.sample(self._loading_tips, len(self._loading_tips))
 
     def _setup_loading_screen(self):
         """Setup loading screen animation with 4 frame loading icon"""
@@ -169,30 +170,35 @@ class Game:
         if hasattr(self, '_loading_tips') and self._loading_tips:
             self._tip_change_timer += dt
             
-            # Handle tip fading
+            # Handle fade transitions
             if self._tip_fading:
                 self._tip_fade_timer += dt
-                if self._tip_fade_timer <= self._tip_fade_duration:
-                    # Fade out
-                    progress = self._tip_fade_timer / self._tip_fade_duration
-                    self._tip_fade_alpha = int(255 * (1 - progress))
-                elif self._tip_fade_timer <= self._tip_fade_duration * 2:
-                    # Change tip at halfway point and fade in
-                    if self._tip_fade_alpha == 0:
-                        self._current_tip_index = random.randint(0, len(self._shuffled_tips) - 1)
-                        print(f"Changing loading tip to index: {self._current_tip_index}")
-                    
-                    # Fade in
-                    progress = (self._tip_fade_timer - self._tip_fade_duration) / self._tip_fade_duration
-                    self._tip_fade_alpha = int(255 * progress)
+                fade_progress = self._tip_fade_timer / self._tip_fade_duration
+                
+                if fade_progress < 0.5:
+                    # Fade out current tip
+                    self._tip_fade_alpha = int(255 * (1 - fade_progress * 2))
                 else:
-                    # Fade complete
+                    # Change tip at halfway point and fade in
+                    if fade_progress == 0.5 or (fade_progress > 0.5 and self._tip_fade_alpha < 128):
+                        # Pick a new random tip (avoid repeating the same tip)
+                        new_tip = random.choice(self._loading_tips)
+                        while new_tip == self._current_tip and len(self._loading_tips) > 1:
+                            new_tip = random.choice(self._loading_tips)
+                        self._current_tip = new_tip
+                    
+                    # Fade in new tip
+                    self._tip_fade_alpha = int(255 * ((fade_progress - 0.5) * 2))
+                
+                # End fade transition
+                if fade_progress >= 1.0:
                     self._tip_fading = False
-                    self._tip_fade_timer = 0
                     self._tip_fade_alpha = 255
+                    self._tip_fade_timer = 0
                     self._tip_change_timer = 0
+            
+            # Start new fade transition when timer expires
             elif self._tip_change_timer >= self._tip_change_interval:
-                # Start fading to next tip
                 self._tip_fading = True
                 self._tip_fade_timer = 0
 
@@ -202,10 +208,7 @@ class Game:
             return
         
         # Get current tip
-        current_tip = self._shuffled_tips[self._current_tip_index]
-        
-        # Create text surface with current alpha
-        tip_color = (255, 255, 255, self._tip_fade_alpha)
+        current_tip = self._current_tip
         
         # Word wrap the tip text for better display
         words = current_tip.split(' ')
@@ -1025,10 +1028,10 @@ class Game:
         # Add a secret code hint
         self._secret_hint = pygame_gui.elements.UILabel(
             relative_rect=pygame.Rect(
-                (SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT - 30),
-                (300, 20)
+                (SCREEN_WIDTH // 2 - 300, SCREEN_HEIGHT - 30),
+                (600, 20)
             ),
-            text="Type the secret code to unlock...",
+            text="Type the password to unlock the secret level!",
             manager=self._ui_manager
         )
 
