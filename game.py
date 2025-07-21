@@ -779,13 +779,13 @@ class Game:
 
         # Check if the level index is 3 or 4
         if level_index in [2, 3]:
-            self._level = CaveLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index])
+            self._level = CaveLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index], level_index = level_index)
         elif level_index == 4:
-            self._level = SpaceLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index])
+            self._level = SpaceLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index], level_index = level_index)
         elif level_index == 5:
             self._level = BossArena(tmx_map=levels[level_index], spawn=spawn_points[level_index])
         else:
-            self._level = PymunkLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index])
+            self._level = PymunkLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index], level_index = level_index)
 
         self._current_level_index = level_index  # Store current index.
 

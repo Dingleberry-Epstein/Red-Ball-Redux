@@ -2454,7 +2454,7 @@ class GameStats:
         total_score = base_score + time_bonus + ring_bonus + enemy_bonus + secret_bonus - death_penalty
         return max(0, total_score)
         
-    def get_rank(self, s=1270, a=1050, b=850, c=650, d=350):
+    def get_rank(self, s=1355, a=1275, b=1150, c=950, d=750):
         """Calculate rank based on performance (S, A, B, C, D, E)"""
         score = self.calculate_score()
         
@@ -2737,7 +2737,7 @@ class ResultsScreen:
             self.stats_to_show = [
                 {"key": "time", "label": "Time:", "value": self.format_time(self.stats.completion_time), 
                 "color": (255, 255, 255), "alpha": 0, "shown": False},
-                {"key": "rings", "label": "Rings:", "value": str(self.stats.rings_collected), 
+                {"key": "rings", "label": "Coins:", "value": str(self.stats.rings_collected), 
                 "color": self._cached_colors.get('rings', (255, 255, 255)), "alpha": 0, "shown": False},
                 {"key": "enemies", "label": "Enemies:", "value": str(self.stats.enemies_defeated), 
                 "color": self._cached_colors.get('enemies', (255, 255, 255)), "alpha": 0, "shown": False},
@@ -2777,7 +2777,7 @@ class ResultsScreen:
     
     def get_rings_color(self, rings_count):
         """Get color for rings based on count (higher = whiter, lower = more red)"""
-        max_rings = 100  # Adjust based on your game's ring distribution
+        max_rings = 20  # Adjust based on your game's ring distribution
         
         if rings_count >= max_rings:
             return (255, 255, 255)  # Pure white for excellent
@@ -2831,7 +2831,7 @@ class ResultsScreen:
         }
         self.sparkle_particles.append(sparkle)
     
-    def draw(self, screen):
+    def draw(self, screen, level_index=0):
         """Draw the results screen"""
         if not self.results_shown or not self.stats:
             return
@@ -2856,8 +2856,17 @@ class ResultsScreen:
             
         # Rank display (only show if victory music is finished and rank is animating)
         if self.victory_music_finished and self.rank_scale > 0:
-            self.draw_rank(screen)
-            
+            if level_index == 0:
+                self.draw_rank(screen)
+            elif level_index == 1:
+                self.draw_rank(screen, s=1365, a=1200, b=1050, c=850, d=650)
+            elif level_index == 2:
+                self.draw_rank(screen, s=1720, a=1500, b=1300, c=1050, d=800)
+            elif level_index == 3:
+                self.draw_rank(screen, s=1470, a=1300, b=1150, c=950, d=700)
+            elif level_index == 4:
+                self.draw_rank(screen, s=2210, a=1900, b=1650, c=1350, d=1000)
+
         # Draw sparkles for S rank
         for particle in self.sparkle_particles:
             pygame.draw.circle(screen, particle["color"], 
@@ -2908,9 +2917,9 @@ class ResultsScreen:
                 value_rect = value_surf.get_rect(center=(self.screen_width // 2 + 100, y_pos))
                 screen.blit(value_surf, value_rect)
     
-    def draw_rank(self, screen):
+    def draw_rank(self, screen, s=1355, a=1275, b=1150, c=950, d=750):
         """Draw the rank with scaling animation"""
-        rank = self.stats.get_rank()
+        rank = self.stats.get_rank(s, a, b, c, d)
         rank_color = self.rank_colors.get(rank, (255, 255, 255))
         
         # Scale the font size based on animation

@@ -801,3 +801,154 @@ class Credits:
         if pygame.time.get_ticks() % 60 < 30:  # Flash every half second
             # Simple indicator in the corner to show credits are active
             pygame.draw.circle(self._screen, (255, 0, 0), (20, 20), 5)
+
+class Coin(pygame.sprite.Sprite):
+    """Collectible coin that follows the same pattern as NPCs"""
+    
+    def __init__(self, physics, x, y, coin_type='gold', value=10):
+        super().__init__()
+        self._physics = physics
+        self.coin_type = coin_type.lower()
+        self.value = value
+        self.collected = False
+        
+        # Animation properties
+        self.animation_time = 0
+        self.bob_speed = 3.0  # Speed of bobbing animation
+        self.bob_height = 5   # Height of bobbing in pixels
+        self.rotation_speed = 2.0  # Speed of rotation
+        self.current_rotation = 0
+        
+        # Create coin surface based on type
+        self.original_image = self._create_coin_image()
+        self.image = self.original_image.copy()
+        self.rect = self.image.get_rect()
+        
+        # Position
+        self.start_x = x
+        self.start_y = y
+        self.rect.centerx = x
+        self.rect.centery = y
+        
+        # Collection animation
+        self.collection_animation_time = 0
+        self.collection_duration = 0.5  # seconds
+        self.is_being_collected = False
+        
+    def _create_coin_image(self):
+        """Create the coin image based on coin type"""
+        size = 50 if self.coin_type == 'gold' else 30
+        
+        # Create surface with transparency
+        surface = pygame.Surface((size, size), pygame.SRCALPHA)
+        
+        if self.coin_type == 'gold':
+            # Gold coin - yellow with darker border
+            pygame.draw.circle(surface, (255, 215, 0), (size//2, size//2), size//2)
+            pygame.draw.circle(surface, (218, 165, 32), (size//2, size//2), size//2, 2)
+            # Add inner circle for detail
+            pygame.draw.circle(surface, (255, 255, 0), (size//2, size//2), size//3, 1)
+        elif self.coin_type == 'silver':
+            # Silver coin - light gray with darker border
+            pygame.draw.circle(surface, (192, 192, 192), (size//2, size//2), size//2)
+            pygame.draw.circle(surface, (128, 128, 128), (size//2, size//2), size//2, 2)
+            pygame.draw.circle(surface, (220, 220, 220), (size//2, size//2), size//3, 1)
+        else:  # copper or default
+            # Copper coin - bronze color
+            pygame.draw.circle(surface, (184, 115, 51), (size//2, size//2), size//2)
+            pygame.draw.circle(surface, (138, 75, 31), (size//2, size//2), size//2, 2)
+            pygame.draw.circle(surface, (205, 127, 50), (size//2, size//2), size//3, 1)
+        
+        return surface
+    
+    def update(self, dt):
+        """Update coin logic and animation state"""
+        if self.collected:
+            return
+            
+        if self.is_being_collected:
+            self._update_collection_animation(dt)
+        else:
+            self._update_idle_animation(dt)
+        
+        # Update the visual image for sprite group drawing
+        self._update_visual()
+    
+    def _update_idle_animation(self, dt):
+        """Update the floating/bobbing animation"""
+        self.animation_time += dt
+        
+        # Bobbing motion
+        bob_offset = math.sin(self.animation_time * self.bob_speed) * self.bob_height
+        self.rect.centery = self.start_y + bob_offset
+        
+        # Rotation effect (simulate 3D rotation by scaling horizontally)
+        self.current_rotation += self.rotation_speed * dt
+    
+    def _update_collection_animation(self, dt):
+        """Update the collection animation (coin flies up and fades)"""
+        self.collection_animation_time += dt
+        
+        progress = self.collection_animation_time / self.collection_duration
+        
+        if progress >= 1.0:
+            self.collected = True
+            return
+        
+        # Move up during collection
+        rise_distance = 30
+        self.rect.centery = self.start_y - (rise_distance * progress)
+    
+    def _update_visual(self):
+        """Update the visual appearance of the coin"""
+        if self.is_being_collected:
+            # Collection animation - fade out
+            progress = self.collection_animation_time / self.collection_duration
+            alpha = int(255 * (1 - progress))
+            self.image = self.original_image.copy()
+            self.image.set_alpha(alpha)
+        else:
+            # Idle animation - rotation effect
+            scale_factor = abs(math.cos(self.current_rotation))
+            
+            if scale_factor > 0.1:  # Avoid division by very small numbers
+                original_width = self.original_image.get_width()
+                new_width = max(1, int(original_width * scale_factor))
+                self.image = pygame.transform.scale(self.original_image, 
+                                                  (new_width, self.original_image.get_height()))
+                
+                # Keep the coin centered
+                old_center = self.rect.center
+                self.rect = self.image.get_rect()
+                self.rect.center = old_center
+            else:
+                # Very thin, just use a 1-pixel wide version
+                self.image = pygame.transform.scale(self.original_image, (1, self.original_image.get_height()))
+                old_center = self.rect.center
+                self.rect = self.image.get_rect()
+                self.rect.center = old_center
+    
+    def draw(self, screen):
+        """Draw the coin to the screen"""
+        if not self.collected:
+            screen.blit(self.image, self.rect)
+    
+    def collect(self):
+        """Start the collection animation"""
+        if not self.collected and not self.is_being_collected:
+            self.is_being_collected = True
+            return self.value
+        return 0
+    
+    def align_to_ground(self, level):
+        """Align coin to ground level, similar to NPCs"""
+        if hasattr(level, 'collision_tiles'):
+            # Find the ground below the coin
+            test_rect = pygame.Rect(self.rect.centerx - 5, self.rect.bottom, 10, 200)
+            
+            for tile in level.collision_tiles:
+                if test_rect.colliderect(tile.rect):
+                    # Position coin slightly above the ground
+                    self.start_y = tile.rect.top - self.rect.height // 2 - 5
+                    self.rect.centery = self.start_y
+                    break

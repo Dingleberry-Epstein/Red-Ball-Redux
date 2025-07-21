@@ -3,7 +3,7 @@ from constants import *
 from utils import PhysicsManager, ParallaxBackground, DialogueSystem, LevelTimer, GameStats, ResultsScreen
 from characters import PurePymunkBall, NPCCharacter, BlueBall, SignNPC, Cubodeez_The_Almighty_Cube as cb
 from utils import Camera, SpatialGrid
-from objects import RocketLauncher, Rocket, Credits, Explosion
+from objects import RocketLauncher, Rocket, Credits, Explosion, Coin
 pygame.mixer.init()
 
 Level1 = os.path.join("assets", "world building", "Tiled Worlds", "Level1.tmx")
@@ -23,7 +23,8 @@ spawn_points = [spawn1, spawn2, spawn3, spawn4, spawn5, spawn6]
 
 class PymunkLevel:
     """Level that uses spatial partitioning for efficient rendering"""
-    def __init__(self, spawn, tmx_map=None, play_music=True):
+    def __init__(self, spawn, tmx_map=None, play_music=True, level_index=0):
+        self._level_index = level_index  # Store the level index for music and stats
         x, y = spawn
         self._spawn_point = spawn
         self._physics = PhysicsManager()
@@ -55,6 +56,7 @@ class PymunkLevel:
         self._visual_tiles = pygame.sprite.Group()  # Keep this for compatibility
         self._mask_switch_triggers = []
         self._finish_tiles = []  # Store finish line tiles
+        self._coin_tiles = []
         self._music_switch_tiles = []
         self._switch_used = False
         self._level_complete = False  # Track if level is complete
@@ -261,6 +263,7 @@ class PymunkLevel:
         # Process triggers (always present regardless of active layer)
         self.load_triggers()
         self.initialize_npcs()
+        self.initialize_coins()
 
     def clear_physics_objects(self):
         """Clear all physics objects from space and memory"""
@@ -300,6 +303,7 @@ class PymunkLevel:
         self._finish_tiles = []
         self.npc_tiles = []  # Store NPC tiles for initialization later
         self.sign_objects = []  # New list to store sign objects
+        self._coin_tiles = []  # Store coin tiles for initialization later
         self.NPCs = pygame.sprite.Group()  # Initialize NPCs group
 
         # Cache for better performance
@@ -416,6 +420,19 @@ class PymunkLevel:
             self._music_switch_tiles.append(visual_tile)
             print(f"Music switch tile created at ({world_x}, {world_y})")
 
+        if properties and properties.get('coin', False):  # Check for 'coin' property
+            # Store coin info in the tile for later use
+            visual_tile.is_coin = True
+            visual_tile.coin_type = properties.get('coin_type', 'gold').lower()
+            visual_tile.coin_value = int(properties.get('coin_value', 10))
+            
+            # Add to coin_tiles list for initialization later
+            if not hasattr(self, 'coin_tiles'):
+                self.coin_tiles = []
+            self.coin_tiles.append(visual_tile)
+            
+            print(f"Found coin tile: {visual_tile.coin_type} (value: {visual_tile.coin_value}) at ({world_x}, {world_y})")
+  
     def _process_object_layers(self):
         """Process the TiledObjectGroup layers for direct object placement"""
         for layer in self._tmx_data.visible_layers:
@@ -570,6 +587,92 @@ class PymunkLevel:
                     elif hasattr(obj, 'name') and obj.name == "Checkpoint":
                         self._checkpoints.append((obj.x, obj.y))
 
+    def initialize_coins(self):
+        """Create coins at their designated positions"""
+        
+        # Keep existing coins group if it exists, otherwise create new
+        if not hasattr(self, 'coins') or self.coins is None:
+            self.coins = pygame.sprite.Group()
+            print("created new coins group")
+        
+        # Process coin tiles from the Objects layer
+        if hasattr(self, 'coin_tiles') and self.coin_tiles:
+            print(f"Initializing {len(self.coin_tiles)} coins from tiles...")
+            
+            for coin_tile in self.coin_tiles:
+                x, y = coin_tile.rect.center
+                coin_type = getattr(coin_tile, 'coin_type', 'gold').lower()
+                coin_value = getattr(coin_tile, 'coin_value', 10)
+                
+                print(f"Creating {coin_type} coin worth {coin_value} at ({x}, {y})")
+                
+                # Create coin based on type
+                coin = Coin(self._physics, x, y, coin_type=coin_type, value=coin_value)
+                
+                # Add to sprite group
+                self.coins.add(coin)
+                
+                # Verify coin added properly
+                if coin in self.coins:
+                    print(f"Successfully added {coin_type} coin to group")
+                else:
+                    print(f"WARNING: Failed to add {coin_type} coin to group")
+                
+                # Align coin to ground
+                if hasattr(coin, 'align_to_ground'):
+                    coin.align_to_ground(self)
+        
+        # Add coin collection state if not already present
+        if not hasattr(self, '_total_coins_collected'):
+            self._total_coins_collected = 0
+        if not hasattr(self, '_coin_score'):
+            self._coin_score = 0
+        
+        # Log completion
+        coin_count = len(self.coins) if hasattr(self, 'coins') else 0
+        print(f"Coin initialization complete. {coin_count} coins created.")
+
+    def update_coins(self, dt):
+        """Update all coins (add this method to your level class)"""
+        if hasattr(self, 'coins'):
+            # Update all coins
+            self.coins.update(dt)
+            
+            # Remove collected coins
+            for coin in list(self.coins):
+                if coin.collected:
+                    self.coins.remove(coin)
+
+    def check_coin_collection(self, player):
+        """Check if player collects any coins (add this method to your level class)"""
+        if not hasattr(self, 'coins'):
+            return 0
+        
+        coins_collected = 0
+        
+        for coin in list(self.coins):
+            if not coin.is_being_collected and not coin.collected:
+                # Check collision with player
+                if player.rect.colliderect(coin.rect):
+                    value = coin.collect()
+                    if value > 0:
+                        coins_collected += 1
+                        self._coin_score += value
+                        self._total_coins_collected += 1
+                        
+                        # Call the existing collect_ring method to integrate with your stats system
+                        if hasattr(player, 'collect_ring'):
+                            player.collect_ring()
+                        elif hasattr(self, 'collect_ring'):
+                            self.collect_ring()
+                        
+                        # You can add sound effects here
+                        # self.play_sound('coin_collect')
+                        
+                        print(f"Collected {coin.coin_type} coin worth {value}! Total score: {self._coin_score}")
+        
+        return coins_collected
+
     def initialize_npcs(self):
         """Create NPC characters and signs at their designated positions"""
         
@@ -697,6 +800,14 @@ class PymunkLevel:
             # Update camera
             self._camera.update(self._ball)
 
+            # Update coins
+            if hasattr(self, 'update_coins'):
+                self.update_coins(dt)
+            
+            # Check coin collection (probably in your player update section)
+            if hasattr(self, 'check_coin_collection') and hasattr(self, '_ball'):
+                self.check_coin_collection(self._ball)
+
             # Update parallax background based on camera position
             camera_center_x = -self._camera.offset_x + SCREEN_WIDTH/2
             camera_center_y = -self._camera.offset_y + SCREEN_HEIGHT/2
@@ -804,6 +915,10 @@ class PymunkLevel:
         if hasattr(self, '_ball'):
             screen.blit(self._ball.image, self._camera.apply(self._ball))
 
+        if self.coins:
+            for coin in self.coins:
+                screen.blit(coin.image, self._camera.apply(coin))
+
         # Draw dialogue system if active
         if self._in_dialogue:
             self._dialogue_system.draw(screen)
@@ -818,7 +933,7 @@ class PymunkLevel:
         
         # Draw results screen if active
         if self._showing_results:
-            self._results_screen.draw(screen)
+            self._results_screen.draw(screen, level_index=self._level_index)
 
     def draw_timer(self, screen):
         """Draw the timer display"""
@@ -844,7 +959,7 @@ class PymunkLevel:
         """Draw current stats in HUD"""
         font = pygame.font.Font(daFont, 14)
         stats_info = [
-            f"Rings: {self._stats.rings_collected}",
+            f"Coins: {self._stats.rings_collected}",
             f"Enemies: {self._stats.enemies_defeated}",
             f"Deaths: {self._stats.deaths}"
         ]
@@ -1330,9 +1445,9 @@ class PymunkLevel:
     
 class CaveLevel(PymunkLevel):
     """Cave-themed level with fog particle effects, using optimized rendering"""
-    def __init__(self, spawn, tmx_map=None):
+    def __init__(self, spawn, tmx_map=None, level_index=2):
         # Call the optimized parent class constructor but disable default music
-        super().__init__(spawn, tmx_map, play_music=False)
+        super().__init__(spawn, tmx_map, play_music=False, level_index=2)
         
         # Set cave-specific music
         self._setup_cave_music()
@@ -1490,9 +1605,9 @@ class CaveLevel(PymunkLevel):
 class SpaceLevel(PymunkLevel):
     """Space-themed level with low gravity and space backgrounds"""
     
-    def __init__(self, spawn, tmx_map=None):
+    def __init__(self, spawn, tmx_map=None, level_index=4):
         # Call parent constructor with disabled music
-        super().__init__(spawn, tmx_map, play_music=False)
+        super().__init__(spawn, tmx_map, play_music=False, level_index=4)
         
         # Set space-specific music
         self._setup_space_music()
@@ -1871,7 +1986,8 @@ class BossArena(SpaceLevel):
                 boss_arena._game_over_timer = 0.0  # Reset the auto-return timer
                 
                 # Play death sound if available
-                pygame.mixer_music.stop()
+                pygame.mixer_music.fadeout(200)
+                time.sleep(0.2)  # Wait for fadeout to complete
                 pygame.mixer_music.load(os.path.join("assets", "music", "game over.mp3"))
                 pygame.mixer_music.play()  
 
@@ -2861,19 +2977,18 @@ class BossArena(SpaceLevel):
                 elif self._menu_button_rect.collidepoint(mouse_pos):
                     print("Menu button clicked - returning to main menu")
                     # Signal to the game to return to main menu
-                    if hasattr(self, '_game_ref') and self._game_ref:
-                        # Fade out music
-                        pygame.mixer_music.fadeout(500)
-                        # Set state to main menu
-                        self._game_ref.state = "main_menu"
-                        # Play menu music
-                        try:
-                            pygame.mixer_music.load(os.path.join("assets", "music", "theme.mp3"))
-                            global CURRENT_TRACK
-                            CURRENT_TRACK = 'menu'
-                            pygame.mixer_music.play(-1)
-                        except:
-                            pass
+                    # Fade out music
+                    pygame.mixer_music.fadeout(500)
+                    # Set state to main menu
+                    self._game_ref.state = "main_menu"
+                    # Play menu music
+                    try:
+                        pygame.mixer_music.load(os.path.join("assets", "music", "theme.mp3"))
+                        global CURRENT_TRACK
+                        CURRENT_TRACK = 'menu'
+                        pygame.mixer_music.play(-1)
+                    except:
+                        pass
                     return True
         
         # All events are consumed by game over screen when active
