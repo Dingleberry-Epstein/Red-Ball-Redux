@@ -82,6 +82,23 @@ class Game:
         self._map_system = MapSystem(self)
         self._map_key_pressed = False  # Track M key state to avoid repeat toggling
 
+        self._level_images = {}  # Dictionary to store level images
+        self._scroll_offset = 0
+        self._target_scroll = 0
+        self._selected_level = 0
+        self._level_positions = []
+        self._level_rects = []
+        
+        # Configuration for level images (add this to your game initialization)
+        self._level_image_paths = {
+            0: os.path.join("assets", "sprites", "level thumbnails", "level 1.png"),  # Configure these paths as needed
+            1: os.path.join("assets", "sprites", "level thumbnails", "level 2.png"),
+            2: os.path.join("assets", "sprites", "level thumbnails", "level 3.png"),
+            3: os.path.join("assets", "sprites", "level thumbnails", "level 4.png"),
+            4: os.path.join("assets", "sprites", "level thumbnails", "level 5.png"),
+            5: os.path.join("assets", "sprites", "level thumbnails", "level 6.png")
+        }
+
         # Setup loading screen
         self._setup_loading_screen()
 
@@ -709,6 +726,10 @@ class Game:
             # Setup main menu buttons if not already set up
             if not hasattr(self, '_main_menu_buttons') or not self._main_menu_buttons:
                 self.setup_main_menu()
+            
+            # Update level select if open
+            if self._level_select_open:
+                self.update_level_select(dt)
                 
             self.render_main_menu()
         elif self._state == "credits":
@@ -848,11 +869,6 @@ class Game:
             if self._show_level_complete:
                 self._draw_level_complete_overlay()
 
-        # FPS Display
-        fps_counter = self._clock.get_fps()
-        fps_display = self._small_font.render(f"FPS: {int(fps_counter)}", True, (255, 255, 255))
-        self._screen.blit(fps_display, (SCREEN_WIDTH - 120, 10))
-        
         # Draw map system if open (with level dimensions)
         if self._state == "game" and self._level and (self._map_system.is_open or self._map_system.fading_in or self._map_system.fading_out or self._map_system.show_message):
             # Get player position
@@ -874,7 +890,7 @@ class Game:
         self._screen.blit(overlay, (0, 0))
 
         # Draw completion message with Daydream font
-        completion_text = "Level Complete!"
+        completion_text = "Returning to menu..."
         text_surface = self._pixel_font.render(completion_text, True, (255, 255, 255))
         text_rect = text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
         self._screen.blit(text_surface, text_rect)
@@ -901,6 +917,7 @@ class Game:
             
             # Draw the text with outline
             self.render_outlined_text(text, (255, 255, 255), (0, 0, 0), (text_x, text_y))
+            
     def setup_main_menu(self):
         """Set up the main menu UI elements with pygame-gui"""
         # Clear any existing buttons
@@ -952,8 +969,25 @@ class Game:
         )
         self._main_menu_buttons.append(exit_button)
 
+    def load_level_images(self):
+        """Load level preview images"""
+        for level_id, path in self._level_image_paths.items():
+            try:
+                # Load and scale the image to fit the level squares
+                image = pygame.image.load(path)
+                scaled_image = pygame.transform.scale(image, (100, 100))
+                self._level_images[level_id] = scaled_image
+            except pygame.error:
+                # Create a placeholder colored surface if image doesn't exist
+                placeholder = pygame.Surface((100, 100))
+                if level_id == 5:  # Secret level
+                    placeholder.fill((128, 0, 128))  # Purple for secret
+                else:
+                    placeholder.fill((64 + level_id * 30, 100, 150))  # Different colors per level
+                self._level_images[level_id] = placeholder
+
     def open_level_select(self):
-        """Opens the level selection menu with a scrollable container"""
+        """Opens the level selection menu with a horizontal scrollable grid"""
         self._level_select_open = True
         
         # Hide main menu buttons
@@ -961,60 +995,49 @@ class Game:
             for button in self._main_menu_buttons:
                 button.hide()
         
-        # Clear any existing level buttons
-        if hasattr(self, '_level_buttons'):
-            for button in self._level_buttons:
-                if hasattr(button, 'kill'):
-                    button.kill()
-        self._level_buttons = []
+        # Clean up any existing level select UI elements first
+        self._cleanup_level_select_ui()
         
-        # Create a scrollable container
-        container_width = 300
-        container_height = 400
+        # Load level images if not already loaded
+        if not self._level_images:
+            self.load_level_images()
         
-        # Create a container at the center of the screen
-        self._level_container = pygame_gui.elements.UIScrollingContainer(
-            relative_rect=pygame.Rect(
-                (SCREEN_WIDTH // 2 - container_width // 2, SCREEN_HEIGHT // 2 - container_height // 2),
-                (container_width, container_height)
-            ),
-            manager=self._ui_manager
+        # Initialize scroll and selection
+        self._scroll_offset = 0
+        self._target_scroll = 0
+        self._selected_level = 0
+        
+        # Calculate level positions
+        self._setup_level_grid()
+        
+        # Create navigation buttons with consistent styling
+        button_y = SCREEN_HEIGHT // 2 + 150
+        
+        self._left_arrow = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect((50, button_y), (60, 60)),
+            text="<",
+            manager=self._ui_manager,
+            object_id="#nav_button"
         )
         
-        # Create level selection buttons within the container
-        button_width = 250
-        button_height = 50
-        button_margin = 20
-        total_height = 0
+        self._right_arrow = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect((SCREEN_WIDTH - 110, button_y), (60, 60)),
+            text=">",
+            manager=self._ui_manager,
+            object_id="#nav_button"
+        )
         
-        # Level buttons (5 levels + secret)
-        for i in range(6):
-            if i == 5:
-                button_text = "???"  # Secret level initially shows as ???
-            else:
-                button_text = f"Level {i + 1}"
-            
-            level_button = pygame_gui.elements.UIButton(
-                relative_rect=pygame.Rect(
-                    (container_width // 2 - button_width // 2, total_height),
-                    (button_width, button_height)
-                ),
-                text=button_text,
-                manager=self._ui_manager,
-                container=self._level_container
-            )
-            
-            # Disable boss level button if not unlocked
-            if i == 5 and not self._boss_level_unlocked:
-                level_button.disable()  # Disable instead of hide for better UX
-            
-            self._level_buttons.append(level_button)
-            total_height += button_height + button_margin
+        self._select_button = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect(
+                (SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 220),
+                (150, 50)
+            ),
+            text="SELECT",
+            manager=self._ui_manager,
+            object_id="#play_button"
+        )
         
-        # Make sure the container is tall enough
-        self._level_container.set_scrollable_area_dimensions((container_width - 20, total_height))
-        
-        # Add back button outside the container using the return_button style from theme
+        # Add back button
         self._back_button = pygame_gui.elements.UIButton(
             relative_rect=pygame.Rect(
                 (SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT - 80),
@@ -1022,118 +1045,344 @@ class Game:
             ),
             text="BACK",
             manager=self._ui_manager,
-            object_id="#return_button"
+            object_id="#exit_button"
         )
         
-        # Add a secret code hint
+        # Add secret code hint
+        hint_text = "Secret level unlocked!" if self._boss_level_unlocked else "Type the password to unlock the secret level!"
         self._secret_hint = pygame_gui.elements.UILabel(
             relative_rect=pygame.Rect(
                 (SCREEN_WIDTH // 2 - 300, SCREEN_HEIGHT - 30),
                 (600, 20)
             ),
-            text="Type the password to unlock the secret level!",
-            manager=self._ui_manager
+            text=hint_text,
+            manager=self._ui_manager,
+            object_id="#hint_label"
         )
 
-    def close_level_select(self):
-        """Closes the level selection menu"""
-        self._level_select_open = False
+    def _cleanup_level_select_ui(self):
+        """Clean up all level select UI elements"""
+        # Clean up navigation and control buttons
+        ui_elements = ['_left_arrow', '_right_arrow', '_select_button', '_back_button', '_secret_hint']
+        for element_name in ui_elements:
+            if hasattr(self, element_name):
+                element = getattr(self, element_name)
+                if element and hasattr(element, 'kill'):
+                    element.kill()
+                    setattr(self, element_name, None)
         
-        # Show main menu buttons
-        if hasattr(self, '_main_menu_buttons'):
-            for button in self._main_menu_buttons:
-                button.show()
-        
-        # Remove level buttons and container
+        # Clean up any level buttons that might exist from old implementation
         if hasattr(self, '_level_buttons'):
             for button in self._level_buttons:
                 if hasattr(button, 'kill'):
                     button.kill()
             self._level_buttons = []
+
+    def _setup_level_grid(self):
+        """Setup the positions and rectangles for level squares"""
+        self._level_positions = []
+        self._level_rects = []
         
-        if hasattr(self, '_level_container') and self._level_container:
-            self._level_container.kill()
+        # Grid configuration
+        base_size = 120
+        spacing = 180
+        center_y = SCREEN_HEIGHT // 2 - 20
+        start_x = SCREEN_WIDTH // 2 - (spacing * 2.2)  # Center the grid
         
-        if hasattr(self, '_back_button') and self._back_button:
-            self._back_button.kill()
+        for i in range(6):  # 6 levels total (5 + secret)
+            x = start_x + (i * spacing)
+            y = center_y
             
-        if hasattr(self, '_secret_hint') and self._secret_hint:
-            self._secret_hint.kill()
+            self._level_positions.append((x, y))
+            self._level_rects.append(pygame.Rect(x - base_size//2, y - base_size//2, base_size, base_size))
 
-    def render_main_menu(self):
-        """Render main menu screen with pygame-gui buttons"""
-        # Draw background layers with parallax effect
-        self._screen.fill((0, 0, 0))  # Fill with black first
+    def update_level_select(self, time_delta):
+        """Update the level select screen"""
+        if not self._level_select_open:
+            return
+            
+        # Smooth scrolling animation
+        if abs(self._target_scroll - self._scroll_offset) > 1:
+            self._scroll_offset += (self._target_scroll - self._scroll_offset) * 0.1
+        else:
+            self._scroll_offset = self._target_scroll
 
-        for layer in self._bg_layers:
-            self._screen.blit(layer['image'], (-layer['pos_x'], -layer['pos_y']))
-
-        # Draw title text
-        title_x = SCREEN_WIDTH // 2 - self._title_text.get_width() // 2
-        self._screen.blit(self._title_text, (title_x, SCREEN_HEIGHT // 4 - self._title_text.get_height() // 2))
+    def handle_level_select_input(self, event):
+        """Handle input for level select"""
+        if not self._level_select_open:
+            return False
+            
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_LEFT or event.key == pygame.K_a:
+                self._move_selection(-1)
+                return True
+            elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:
+                self._move_selection(1)
+                return True
+            elif event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                self._select_current_level()
+                return True
+            elif event.key == pygame.K_ESCAPE:
+                self.close_level_select()
+                return True
         
-        # Draw UI elements
-        self._ui_manager.draw_ui(self._screen)
+        elif event.type == pygame_gui.UI_BUTTON_PRESSED:
+            if hasattr(self, '_left_arrow') and event.ui_element == self._left_arrow:
+                self._move_selection(-1)
+                return True
+            elif hasattr(self, '_right_arrow') and event.ui_element == self._right_arrow:
+                self._move_selection(1)
+                return True
+            elif hasattr(self, '_select_button') and event.ui_element == self._select_button:
+                self._select_current_level()
+                return True
+            elif hasattr(self, '_back_button') and event.ui_element == self._back_button:
+                self.close_level_select()
+                return True
         
-        # If we've unlocked the boss level, show a small indicator
-        if self._boss_level_unlocked:
-            boss_unlocked_text = "BOSS LEVEL UNLOCKED!"
-            boss_text_surface = self._small_font.render(boss_unlocked_text, True, (255, 215, 0))  # Gold color
-            boss_text_rect = boss_text_surface.get_rect(topleft=(10, 10))
-            self._screen.blit(boss_text_surface, boss_text_rect)
+        return False
 
-    def handle_menu_events(self, event):
-        """Handles menu events for UI buttons"""
-        if event.type == pygame.USEREVENT:
-            if event.user_type == pygame_gui.UI_BUTTON_PRESSED:
-                self._handle_ui_button_press(event)
+    def _move_selection(self, direction):
+        """Move the selection left or right"""
+        new_selection = self._selected_level + direction
         
-        # Handle keyboard input for secret code
-        elif event.type == pygame.KEYDOWN:
-            self._handle_secret_code_input(event)
+        # Clamp to valid range
+        if new_selection < 0:
+            new_selection = 0
+        elif new_selection >= 6:
+            new_selection = 5
+            
+        if new_selection != self._selected_level:
+            self._selected_level = new_selection
+            # Update target scroll to center the selected level
+            spacing = 180
+            self._target_scroll = -self._selected_level * spacing + SCREEN_WIDTH // 2
+
+    def _select_current_level(self):
+        """Select the currently highlighted level"""
+        # Check if secret level is locked
+        if self._selected_level == 5 and not self._boss_level_unlocked:
+            # You can add a sound effect or visual feedback here
+            print("Secret level is locked!")
+            return
+            
+        # Close level select and start the selected level
+        self.close_level_select()
+        self.start_level(self._selected_level)
+
+    def draw_level_select(self, screen):
+        """Draw the level select grid as a full screen replacement"""
+        if not self._level_select_open:
+            return
+        
+        # Draw the same background as main menu (no overlay, full replacement)
+        # Background is already drawn in render_main_menu, so we just need to add the new content
+        
+        # Draw level select title with the same style as main menu title
+        if hasattr(self, '_title_text'):
+            title_text = "SELECT LEVEL"
+            title_color = (255, 255, 255)
+            outline_color = (0, 0, 0)
+            title_center = (SCREEN_WIDTH // 2, 120)
+            outline_width = 3
+
+            # Draw outline for title
+            outline_surface = self._pixel_font.render(title_text, True, outline_color)
+            for dx in range(-outline_width, outline_width + 1):
+                for dy in range(-outline_width, outline_width + 1):
+                    if dx != 0 or dy != 0:
+                        screen.blit(outline_surface, (title_center[0] + dx - outline_surface.get_width() // 2,
+                                                     title_center[1] + dy - outline_surface.get_height() // 2))
+            
+            # Draw main title text
+            title_surface = self._pixel_font.render(title_text, True, title_color)
+            title_rect = title_surface.get_rect(center=title_center)
+            screen.blit(title_surface, title_rect)
+        
+        # Draw level squares
+        for i in range(6):
+            if i >= len(self._level_positions):
+                continue
+                
+            base_x, base_y = self._level_positions[i]
+            
+            # Apply scroll offset
+            x = base_x + self._scroll_offset
+            
+            # Skip if off screen
+            if x < -200 or x > SCREEN_WIDTH + 200:
+                continue
+            
+            # Calculate size based on distance from center and selection
+            distance_from_center = abs(x - SCREEN_WIDTH // 2)
+            max_distance = SCREEN_WIDTH // 2
+            
+            # Base size with selection boost
+            if i == self._selected_level:
+                base_size = 140  # Selected level is bigger
+                alpha = 255
+            else:
+                base_size = 100 + max(0, 40 - distance_from_center // 10)  # Size based on distance
+                alpha = max(180, 255 - distance_from_center // 5)  # Fade based on distance
+            
+            # Create rect for this level
+            level_rect = pygame.Rect(x - base_size//2, base_y - base_size//2, base_size, base_size)
+            
+            # Draw level background with border
+            pygame.draw.rect(screen, (40, 40, 40), level_rect)  # Dark background
+            
+            # Draw level border - selected gets special treatment
+            border_color = (255, 255, 0) if i == self._selected_level else (100, 100, 100)
+            border_width = 4 if i == self._selected_level else 2
+            pygame.draw.rect(screen, border_color, level_rect, border_width)
+            
+            # Check if level is locked (only secret level can be locked)
+            is_locked = (i == 5 and not self._boss_level_unlocked)
+            
+            # Draw level image if available
+            if i in self._level_images:
+                # Scale image to current size
+                image_size = base_size - 20  # Leave space for border
+                scaled_image = pygame.transform.scale(self._level_images[i], (image_size, image_size))
+                
+                # Apply lock overlay if locked
+                if is_locked:
+                    # Create a darker version of the image
+                    scaled_image = scaled_image.copy()
+                    dark_overlay = pygame.Surface((image_size, image_size))
+                    dark_overlay.fill((0, 0, 0))
+                    dark_overlay.set_alpha(180)
+                    scaled_image.blit(dark_overlay, (0, 0))
+                elif alpha < 255:
+                    scaled_image = scaled_image.copy()
+                    scaled_image.set_alpha(alpha)
+                
+                image_rect = scaled_image.get_rect(center=(x, base_y))
+                screen.blit(scaled_image, image_rect)
+            else:
+                # Fallback colored rectangle
+                inner_rect = pygame.Rect(x - (base_size-20)//2, base_y - (base_size-20)//2, base_size-20, base_size-20)
+                if is_locked:
+                    color = (64, 64, 64)  # Gray for locked
+                else:
+                    color = (64 + i * 30, 100, 150) if i < 5 else (128, 0, 128)
+                    
+                if alpha < 255 and not is_locked:
+                    color = tuple(int(c * alpha / 255) for c in color)
+                pygame.draw.rect(screen, color, inner_rect)
+            
+            # Draw lock icon if locked
+            if is_locked:
+                lock_font = pygame.font.Font(daFont, 18)
+                lock_text = "LOCKED"
+                lock_color = (255, 255, 255)
+                outline_color = (0, 0, 0)
+                lock_center = (x, base_y)
+                outline_width = 2
+                
+                try:
+                    # Draw outline for LOCKED text
+                    outline_surface = lock_font.render(lock_text, True, outline_color)
+                    for dx in range(-outline_width, outline_width + 1):
+                        for dy in range(-outline_width, outline_width + 1):
+                            if dx != 0 or dy != 0:
+                                screen.blit(outline_surface, (lock_center[0] + dx - outline_surface.get_width() // 2,
+                                                             lock_center[1] + dy - outline_surface.get_height() // 2))
+                    
+                    # Draw main LOCKED text
+                    lock_surface = lock_font.render(lock_text, True, lock_color)
+                    lock_rect = lock_surface.get_rect(center=lock_center)
+                    screen.blit(lock_surface, lock_rect)
+                except:
+                    # Fallback if emoji doesn't render
+                    fallback_text = "LOCK"
+                    # Draw outline for fallback LOCK text
+                    outline_surface = lock_font.render(fallback_text, True, outline_color)
+                    for dx in range(-outline_width, outline_width + 1):
+                        for dy in range(-outline_width, outline_width + 1):
+                            if dx != 0 or dy != 0:
+                                screen.blit(outline_surface, (lock_center[0] + dx - outline_surface.get_width() // 2,
+                                                             lock_center[1] + dy - outline_surface.get_height() // 2))
+                    
+                    # Draw main fallback LOCK text
+                    lock_surface = lock_font.render(fallback_text, True, lock_color)
+                    lock_rect = lock_surface.get_rect(center=lock_center)
+                    screen.blit(lock_surface, lock_rect)
+            
+            # Draw level number/text
+            font = pygame.font.Font(daFont, 18)
+            if i == 5:
+                text = "???" if not self._boss_level_unlocked else "BOSS"
+            else:
+                text = "Level "  + str( i + 1)
+            
+            text_color = (255, 255, 255) if alpha > 200 else (alpha, alpha, alpha)
+            if is_locked:
+                text_color = (128, 128, 128)
+            
+            text_center = (x, base_y + base_size//2 + 25)
+            outline_color = (0, 0, 0) # Black outline for level numbers/text
+            outline_width = 2
+
+            # Draw outline for level number/text
+            outline_surface = font.render(text, True, outline_color)
+            for dx in range(-outline_width, outline_width + 1):
+                for dy in range(-outline_width, outline_width + 1):
+                    if dx != 0 or dy != 0:
+                        screen.blit(outline_surface, (text_center[0] + dx - outline_surface.get_width() // 2,
+                                                     text_center[1] + dy - outline_surface.get_height() // 2))
+            
+            # Draw main level number/text
+            text_surface = font.render(text, True, text_color)
+            text_rect = text_surface.get_rect(center=text_center)
+            screen.blit(text_surface, text_rect)
+        
+        # Draw selection indicator
+        center_x = SCREEN_WIDTH // 2
+        # Draw a pulsing circle
+        import math
+        pulse = abs(math.sin(pygame.time.get_ticks() / 200.0))
+        radius = int(5 + pulse * 3)
+        pygame.draw.circle(screen, (255, 255, 0), (center_x, SCREEN_HEIGHT // 2 + 100), radius)
+        
+        # Draw navigation instructions with better styling
+        if hasattr(self, '_small_font'):
+            instructions = [
+                "A/D or LEFT/RIGHT to navigate",
+                "ENTER/SPACE to select"
+            ]
+            
+            y_offset = SCREEN_HEIGHT - 140
+            instruction_outline_color = (0, 0, 0)
+            instruction_text_color = "WHITE"
+            outline_width = 1
+
+            for i, instruction in enumerate(instructions):
+                inst_center = (SCREEN_WIDTH // 2, y_offset + i * 40)
+                
+                # Draw outline for instructions
+                outline_surface = self._small_font.render(instruction, True, instruction_outline_color)
+                for dx in range(-outline_width, outline_width + 1):
+                    for dy in range(-outline_width, outline_width + 1):
+                        if dx != 0 or dy != 0:
+                            screen.blit(outline_surface, (inst_center[0] + dx - outline_surface.get_width() // 2,
+                                                         inst_center[1] + dy - outline_surface.get_height() // 2))
+                
+                # Draw main instruction text
+                inst_surface = self._small_font.render(instruction, True, instruction_text_color)
+                inst_rect = inst_surface.get_rect(center=inst_center)
+                screen.blit(inst_surface, inst_rect)
 
     def _handle_ui_button_press(self, event):
         """Handle UI button presses in the menu"""
-        # Main menu buttons
-        if hasattr(self, '_main_menu_buttons') and self._main_menu_buttons:
+        # Main menu buttons (only if level select is not open)
+        if not self._level_select_open and hasattr(self, '_main_menu_buttons') and self._main_menu_buttons:
             if event.ui_element == self._main_menu_buttons[0]:  # START
                 self.open_level_select()
             elif len(self._main_menu_buttons) > 1 and event.ui_element == self._main_menu_buttons[1]:  # CREDITS
                 self._handle_credits_button()
             elif len(self._main_menu_buttons) > 2 and event.ui_element == self._main_menu_buttons[2]:  # EXIT
                 self._handle_exit_button()
-        
-        # Handle level selection back button
-        if hasattr(self, '_back_button') and event.ui_element == self._back_button:
-            self.close_level_select()
-        
-        # Handle level selection
-        elif self._level_select_open and hasattr(self, '_level_buttons'):
-            for i, button in enumerate(self._level_buttons):
-                if event.ui_element == button:
-                    self.start_level(i)
-                    break
-
-    def _handle_credits_button(self):
-        """Handle when the credits button is pressed"""
-        def render_main_menu():
-            self.update_background()
-            self.render_main_menu()
-        
-        SceneManager.fade_to_black(self._screen, render_main_menu, self._fade_duration)
-        pygame.mixer_music.fadeout(500)
-        self._credits = objects.Credits(self._screen, SCREEN_WIDTH, SCREEN_HEIGHT)
-        self.handle_state_transition("credits")
-
-    def _handle_exit_button(self):
-        """Handle when the exit button is pressed"""
-        def render_main_menu():
-            self.update_background()
-            self.render_main_menu()
-        
-        pygame.mixer_music.fadeout(900)
-        SceneManager.fade_to_black(self._screen, render_main_menu, self._fade_duration)
-        self._running = False
 
     def _handle_secret_code_input(self, event):
         """Handle keyboard input for the secret code"""
@@ -1150,11 +1399,9 @@ class Game:
                 self._boss_level_unlocked = True
                 print("BOSS LEVEL UNLOCKED!")
                 
-                # Update the BOSS level button if we're in level select
-                if self._level_select_open and hasattr(self, '_level_buttons') and len(self._level_buttons) >= 6:
-                    # Update the label and enable the boss level button
-                    self._level_buttons[5].set_text("BOSS")
-                    self._level_buttons[5].enable()
+                # Update the secret hint text if in level select
+                if self._level_select_open and hasattr(self, '_secret_hint') and self._secret_hint:
+                    self._secret_hint.set_text("Secret level unlocked!")
                 
                 # Play a special sound effect (if available)
                 try:
@@ -1180,7 +1427,8 @@ class Game:
                 self.setup_main_menu()
                 
             # Reset level select state
-            self._level_select_open = False
+            if self._level_select_open:
+                self.close_level_select()
                     
         elif new_state == "game":
             # Hide all UI elements during game
@@ -1188,11 +1436,19 @@ class Game:
                 for button in self._main_menu_buttons:
                     button.hide()
                     
+            # Close level select if open
+            if self._level_select_open:
+                self.close_level_select()
+                    
         elif new_state == "credits":
             # Hide all UI elements during credits
             if hasattr(self, '_main_menu_buttons'):
                 for button in self._main_menu_buttons:
                     button.hide()
+                    
+            # Close level select if open
+            if self._level_select_open:
+                self.close_level_select()
         
         # Handle music transitions
         if new_state == "main_menu" and old_state != "main_menu":
@@ -1200,6 +1456,80 @@ class Game:
             global CURRENT_TRACK
             CURRENT_TRACK = 'menu'
             pygame.mixer_music.play(-1)
+
+    def close_level_select(self):
+        """Closes the level selection menu"""
+        self._level_select_open = False
+        
+        # Show main menu buttons
+        if hasattr(self, '_main_menu_buttons'):
+            for button in self._main_menu_buttons:
+                button.show()
+        
+        # Clean up all level select UI elements
+        self._cleanup_level_select_ui()
+
+    def render_main_menu(self):
+        """Render main menu screen with pygame-gui buttons"""
+        # Draw background layers with parallax effect
+        self._screen.fill((0, 0, 0))  # Fill with black first
+
+        for layer in self._bg_layers:
+            self._screen.blit(layer['image'], (-layer['pos_x'], -layer['pos_y']))
+
+        # If level select is open, draw it as a full screen replacement
+        if self._level_select_open:
+            self.draw_level_select(self._screen)
+        else:
+            # Draw normal main menu
+            # Draw title text
+            title_x = SCREEN_WIDTH // 2 - self._title_text.get_width() // 2
+            self._screen.blit(self._title_text, (title_x, SCREEN_HEIGHT // 4 - self._title_text.get_height() // 2))
+            
+            # If we've unlocked the boss level, show a small indicator
+            if self._boss_level_unlocked:
+                boss_unlocked_text = "BOSS LEVEL UNLOCKED!"
+                boss_text_surface = self._small_font.render(boss_unlocked_text, True, (255, 215, 0))  # Gold color
+                boss_text_rect = boss_text_surface.get_rect(topleft=(10, 10))
+                self._screen.blit(boss_text_surface, boss_text_rect)
+        
+        # Draw UI elements (buttons will be shown/hidden based on state)
+        self._ui_manager.draw_ui(self._screen)
+
+    def handle_menu_events(self, event):
+        """Handles menu events for UI buttons"""
+        # Handle level select input first if it's open
+        if self._level_select_open and self.handle_level_select_input(event):
+            return
+        
+        # Handle secret code input when level select is open
+        if event.type == pygame.KEYDOWN and self._level_select_open:
+            self._handle_secret_code_input(event)
+        
+        # Handle main UI button presses
+        elif event.type == pygame_gui.UI_BUTTON_PRESSED:
+            self._handle_ui_button_press(event)
+
+    def _handle_credits_button(self):
+        """Handle when the credits button is pressed"""
+        def render_main_menu():
+            self.update_background()
+            self.render_main_menu()
+        
+        SceneManager.fade_to_black(self._screen, render_main_menu, self._fade_duration)
+        pygame.mixer_music.fadeout(500)
+        self._credits = objects.Credits(self._screen, SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.handle_state_transition("credits")
+
+    def _handle_exit_button(self):
+        """Handle when the exit button is pressed"""
+        def render_main_menu():
+            self.update_background()
+            self.render_main_menu()
+        
+        pygame.mixer_music.fadeout(900)
+        SceneManager.fade_to_black(self._screen, render_main_menu, self._fade_duration)
+        self._running = False
 
     def start_level(self, level_index):
         """Start the specified level with loading screen between transitions"""

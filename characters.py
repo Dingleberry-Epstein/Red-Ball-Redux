@@ -575,7 +575,7 @@ class BlueBall(NPCCharacter):
 				]
 			},
 			{
-				"text": "Yeah, you heard me right brotha, this is a cave. I don't know what tomfoolery caused you to fall down here, but it ain't of any use now. You wanna get outta here? Just find the exit.",
+				"text": "Yeah, you heard me right brotha, this is a cave. I don't know what tomfoolery caused you to fall down here, but it ain't of any use now. I'd suggest you find the exit and get out of here.",
 				"choices": [
 					{"text": "Who are you, anyway?", "next_index": 3},
 					{"text": "Please dude, I am so lost right now.", "next_index": 6},
