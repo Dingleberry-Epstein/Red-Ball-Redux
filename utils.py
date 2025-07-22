@@ -2484,6 +2484,8 @@ class ResultsScreen:
         self.show_time = 0
         self.results_shown = False
         self.stats = None
+        self.current_level_index = 0  # Add this to track current level
+        
         self.rank_colors = {
             "S": (255, 215, 0),    # Gold
             "A": (255, 100, 100),  # Red
@@ -2491,6 +2493,15 @@ class ResultsScreen:
             "C": (100, 100, 255),  # Blue
             "D": (255, 165, 0),    # Orange
             "E": (128, 128, 128)   # Gray
+        }
+        
+        # Level-specific score thresholds
+        self.level_thresholds = {
+            0: {"s": 1350, "a": 1275, "b": 1150, "c": 950, "d": 750},
+            1: {"s": 1365, "a": 1200, "b": 1050, "c": 850, "d": 650},
+            2: {"s": 1720, "a": 1500, "b": 1300, "c": 1050, "d": 800},
+            3: {"s": 1470, "a": 1300, "b": 1150, "c": 950, "d": 700},
+            4: {"s": 2210, "a": 1900, "b": 1650, "c": 1350, "d": 1000},
         }
         
         # Animation states
@@ -2531,9 +2542,10 @@ class ResultsScreen:
         self.stat_display_delay = first_stat_delay
         self.stat_interval = stat_interval
         
-    def show_results(self, stats):
+    def show_results(self, stats, level_index=0):
         """Display the results screen with stats"""
         self.stats = stats
+        self.current_level_index = level_index  # Store the level index
         self.results_shown = True
         self.animation_time = 0
         self.show_time = pygame.time.get_ticks()
@@ -2559,6 +2571,22 @@ class ResultsScreen:
         
         # Start background threads for heavy operations
         self.start_background_threads()
+        
+    def get_level_rank(self, level_index=None):
+        """Get rank for specific level using appropriate thresholds"""
+        if level_index is None:
+            level_index = self.current_level_index
+            
+        # Get thresholds for this level, fall back to level 0 if not found
+        thresholds = self.level_thresholds.get(level_index, self.level_thresholds[0])
+        
+        return self.stats.get_rank(
+            s=thresholds["s"],
+            a=thresholds["a"], 
+            b=thresholds["b"],
+            c=thresholds["c"],
+            d=thresholds["d"]
+        )
         
     def start_background_threads(self):
         """Start background threads for heavy operations"""
@@ -2706,17 +2734,17 @@ class ResultsScreen:
                     
                 # Start rank music when rank animation begins
                 if self.stats and not self.rank_music_started:
-                    self.start_rank_music(self.stats.get_rank())
+                    self.start_rank_music(self.get_level_rank())
                     
             elif rank_elapsed >= 1.0:
                 self.rank_scale = 1.0
                 
                 # Ensure rank music is started
                 if self.stats and not self.rank_music_started:
-                    self.start_rank_music(self.stats.get_rank())
+                    self.start_rank_music(self.get_level_rank())
             
             # Add sparkle particles for S rank (only after rank is revealed)
-            if (self.stats and self.stats.get_rank() == "S" and 
+            if (self.stats and self.get_level_rank() == "S" and 
                 rank_elapsed > 0.5 and len(self.sparkle_particles) < 20):
                 self.add_sparkle()
                 
@@ -2835,6 +2863,10 @@ class ResultsScreen:
         """Draw the results screen"""
         if not self.results_shown or not self.stats:
             return
+        
+        # Update current level index if provided
+        if level_index != self.current_level_index:
+            self.current_level_index = level_index
             
         # Dark semi-transparent background
         overlay = pygame.Surface((self.screen_width, self.screen_height))
@@ -2856,16 +2888,7 @@ class ResultsScreen:
             
         # Rank display (only show if victory music is finished and rank is animating)
         if self.victory_music_finished and self.rank_scale > 0:
-            if level_index == 0:
-                self.draw_rank(screen)
-            elif level_index == 1:
-                self.draw_rank(screen, s=1365, a=1200, b=1050, c=850, d=650)
-            elif level_index == 2:
-                self.draw_rank(screen, s=1720, a=1500, b=1300, c=1050, d=800)
-            elif level_index == 3:
-                self.draw_rank(screen, s=1470, a=1300, b=1150, c=950, d=700)
-            elif level_index == 4:
-                self.draw_rank(screen, s=2210, a=1900, b=1650, c=1350, d=1000)
+            self.draw_rank(screen)
 
         # Draw sparkles for S rank
         for particle in self.sparkle_particles:
@@ -2917,9 +2940,9 @@ class ResultsScreen:
                 value_rect = value_surf.get_rect(center=(self.screen_width // 2 + 100, y_pos))
                 screen.blit(value_surf, value_rect)
     
-    def draw_rank(self, screen, s=1355, a=1275, b=1150, c=950, d=750):
-        """Draw the rank with scaling animation"""
-        rank = self.stats.get_rank(s, a, b, c, d)
+    def draw_rank(self, screen):
+        """Draw the rank with scaling animation using level-specific thresholds"""
+        rank = self.get_level_rank()
         rank_color = self.rank_colors.get(rank, (255, 255, 255))
         
         # Scale the font size based on animation

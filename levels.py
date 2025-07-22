@@ -752,7 +752,7 @@ class PymunkLevel:
         npc_count = len(self.NPCs) if hasattr(self, 'NPCs') else 0
         print(f"NPC and sign initialization complete. {npc_count} NPCs and signs created.")
 
-    def update(self, dt=0):
+    def update(self, dt=0, level_index=0):
         """Update level state with NPCs and dialogue handling"""
         clock = pygame.time.Clock()
         if clock.get_fps() > 0:
@@ -831,8 +831,9 @@ class PymunkLevel:
             if self._current_npc:
                 self._current_npc.print_dialogue()
 
-    def draw(self, screen):
+    def draw(self, screen, level_index=0):
         """Draw level with optimized tile rendering including NPCs"""
+        level_index=self._level_index
         # Draw parallax background
         self._parallax_bg.draw(screen)
         
@@ -933,7 +934,7 @@ class PymunkLevel:
         
         # Draw results screen if active
         if self._showing_results:
-            self._results_screen.draw(screen, level_index=self._level_index)
+            self._results_screen.draw(screen, level_index=level_index)
 
     def draw_timer(self, screen):
         """Draw the timer display"""
@@ -1267,7 +1268,7 @@ class PymunkLevel:
                 self._stats.completion_time = final_time
                 
                 # Show results screen
-                self._results_screen.show_results(self._stats)
+                self._results_screen.show_results(self._stats, self._level_index)
                 self._showing_results = True
                 
                 # Pause the game physics/movement while showing results
@@ -1448,7 +1449,7 @@ class CaveLevel(PymunkLevel):
     def __init__(self, spawn, tmx_map=None, level_index=2):
         # Call the optimized parent class constructor but disable default music
         super().__init__(spawn, tmx_map, play_music=False, level_index=2)
-        
+        self._level_index = level_index  # Store the level index for music and stats
         # Set cave-specific music
         self._setup_cave_music()
         
@@ -1491,13 +1492,14 @@ class CaveLevel(PymunkLevel):
             self._parallax_bg.add_color_layer((30, 25, 40), 0.3)  # Dark purple-grey
             self._parallax_bg.add_color_layer((40, 30, 50), 0.5)  # Medium purple-grey
     
-    def update(self, dt=0):
+    def update(self, dt=0, level_index=2):
         """Update level state including fog particles"""
         # Call the parent update method
-        super().update(dt)
+        super().update(dt, level_index=self._level_index)
     
-    def draw(self, screen):
+    def draw(self, screen, level_index=2):
         """Draw level with fog effects"""
+        level_index = self._level_index
         # Draw parallax background
         self._parallax_bg.draw(screen)
         
@@ -1586,6 +1588,10 @@ class CaveLevel(PymunkLevel):
                     # Fallback if flag_image not available
                     pygame.draw.rect(screen, (255, 0, 0), self._camera.apply_rect(tile.rect), 3)
 
+        if self.coins:
+            for coin in self.coins:
+                screen.blit(coin.image, self._camera.apply(coin))
+
         # Draw dialogue system if active
         if self._in_dialogue:
             self._dialogue_system.draw(screen)
@@ -1600,7 +1606,7 @@ class CaveLevel(PymunkLevel):
         
         # Draw results screen if active
         if self._showing_results:
-            self._results_screen.draw(screen)
+            self._results_screen.draw(screen, level_index=level_index)
 
 class SpaceLevel(PymunkLevel):
     """Space-themed level with low gravity and space backgrounds"""
@@ -1608,7 +1614,7 @@ class SpaceLevel(PymunkLevel):
     def __init__(self, spawn, tmx_map=None, level_index=4):
         # Call parent constructor with disabled music
         super().__init__(spawn, tmx_map, play_music=False, level_index=4)
-        
+        self._level_index = level_index  # Store the level index for music and stats
         # Set space-specific music
         self._setup_space_music()
         
@@ -1676,13 +1682,14 @@ class SpaceLevel(PymunkLevel):
         # Add the starfield as a layer with minimal parallax
         self._parallax_bg.add_surface(bg_surface, 0.05)
     
-    def update(self, dt=0):
+    def update(self, dt=0, level_index=4):
         """Update level state with space-specific behaviors"""
         # Call the parent update method first
-        super().update(dt)
+        super().update(dt, level_index=self._level_index)
     
-    def draw(self, screen):
+    def draw(self, screen, level_index=0):
         """Draw the space level with the ball rendered behind everything else"""
+        level_index = self._level_index
         # Draw parallax background
         self._parallax_bg.draw(screen)
         
@@ -1769,6 +1776,10 @@ class SpaceLevel(PymunkLevel):
                     # Fallback if flag_image not available
                     pygame.draw.rect(screen, (255, 0, 0), self._camera.apply_rect(tile.rect), 3)
 
+        if self.coins:
+            for coin in self.coins:
+                screen.blit(coin.image, self._camera.apply(coin))
+                
         # Draw dialogue system if active
         if self._in_dialogue:
             self._dialogue_system.draw(screen)
@@ -1783,7 +1794,7 @@ class SpaceLevel(PymunkLevel):
         
         # Draw results screen if active
         if self._showing_results:
-            self._results_screen.draw(screen)
+            self._results_screen.draw(screen, level_index=level_index)
 
 class BossArena(SpaceLevel):
     """The final Level is a bossfight against Cubodeez The Almighty Cube"""
