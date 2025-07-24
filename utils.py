@@ -2500,7 +2500,7 @@ class ResultsScreen:
             0: {"s": 1350, "a": 1275, "b": 1150, "c": 950, "d": 750},
             1: {"s": 1365, "a": 1200, "b": 1050, "c": 850, "d": 650},
             2: {"s": 1720, "a": 1500, "b": 1300, "c": 1050, "d": 800},
-            3: {"s": 1470, "a": 1300, "b": 1150, "c": 950, "d": 700},
+            3: {"s": 1770, "a": 1565, "b": 1380, "c": 1150, "d": 850},
             4: {"s": 2210, "a": 1900, "b": 1650, "c": 1350, "d": 1000},
         }
         
@@ -2522,7 +2522,7 @@ class ResultsScreen:
         self.rank_music_started = False
         
         # Timing control
-        self.victory_music_duration = 7.0  # Adjust based on your victory music length
+        self.victory_music_duration = 6.0  # Adjust based on your victory music length
         
         # Cache colors to prevent lag
         self._cached_colors = {}

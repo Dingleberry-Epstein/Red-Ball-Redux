@@ -119,7 +119,7 @@ class Game:
             "Tip: The cake is... not relevant to this game, but we thought we'd say it anyway.",
             "Tip: Press 'M' to open the map... if you've found one.",
             "Tip: Can't complete a level? Sometimes, speed is key. - JackSepticEye.",
-            "Tip: You can reset the ball with 'R' — useful if you're stuck.",
+            "Tip: You can reset the ball with 'R' - useful if you're stuck.",
             "Tip: Some objects can be interacted with by pressing 'E'. Don't worry, it's obvious which ones.",
             "Tip: You can toggle music and audio in the settings screen, once I've added it.",
             "Tip: Don't forget: maps only unlock when collected in-game.",
@@ -881,6 +881,11 @@ class Game:
             
             # Draw map with all the necessary information
             self._map_system.draw(self._screen, player_x, player_y, level_width, level_height)
+
+        # FPS Display
+        fps_counter = self.clock.get_fps()
+        fps_display = pygame.font.Font(daFont, 12).render(f"FPS: {int(fps_counter)}", True, (255, 255, 255))
+        self.screen.blit(fps_display, (SCREEN_WIDTH - 100, 580))
 
     def _draw_level_complete_overlay(self):
         """Draw the level complete overlay with message"""

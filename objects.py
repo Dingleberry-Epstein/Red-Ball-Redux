@@ -269,7 +269,7 @@ class Rocket(GameObject):
         # Update rocket rotation to face movement direction
         if self._velocity.length() > 0:
             angle = math.degrees(math.atan2(self._velocity.y, self._velocity.x))
-            self.image = pygame.transform.rotate(self._original_image, angle)
+            self.image = pygame.transform.rotate(self._original_image, -angle)
             self.rect = self.image.get_rect(center=self.rect.center)
         
         return False  # Rocket continues flying
@@ -818,6 +818,9 @@ class Coin(pygame.sprite.Sprite):
         self.bob_height = 5   # Height of bobbing in pixels
         self.rotation_speed = 2.0  # Speed of rotation
         self.current_rotation = 0
+        self.collect_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'ring.mp3'))
+        self.collect_sound.set_volume(0.5)
+        self.collect_sound_played = False
         
         # Create coin surface based on type
         self.original_image = self._create_coin_image()
@@ -868,6 +871,9 @@ class Coin(pygame.sprite.Sprite):
             
         if self.is_being_collected:
             self._update_collection_animation(dt)
+            if not self.collect_sound_played:
+                self.collect_sound.play()
+                self.collect_sound_played = True
         else:
             self._update_idle_animation(dt)
         
