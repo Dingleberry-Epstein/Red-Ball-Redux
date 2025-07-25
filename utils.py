@@ -2472,19 +2472,25 @@ class GameStats:
             return "E"
 
 class ResultsScreen:
-    """Flashy results screen similar to Sonic games with threading support"""
-    def __init__(self, screen_width, screen_height):
+    """Debug version with extensive logging to identify New Best! issues"""
+    def __init__(self, screen_width, screen_height, game_save):
         self.screen_width = screen_width
         self.screen_height = screen_height
-        self.font_large = pygame.font.Font(daFont, 24)
-        self.font_medium = pygame.font.Font(daFont, 16)
-        self.font_small = pygame.font.Font(daFont, 12)
+        self.game_save = game_save
+        
+        # Enhanced font system with consistent sizing
+        self.font_title = pygame.font.Font(daFont, 36)      # Title
+        self.font_large = pygame.font.Font(daFont, 28)      # Rank
+        self.font_medium = pygame.font.Font(daFont, 20)     # Stats labels/values
+        self.font_small = pygame.font.Font(daFont, 16)      # "New Best!" text
+        self.font_tiny = pygame.font.Font(daFont, 12)       # Small details
         
         self.animation_time = 0
         self.show_time = 0
         self.results_shown = False
         self.stats = None
-        self.current_level_index = 0  # Add this to track current level
+        self.current_level_index = 0
+        self.improvements = []  # Store improvements from save system
         
         self.rank_colors = {
             "S": (255, 215, 0),    # Gold
@@ -2504,14 +2510,17 @@ class ResultsScreen:
             4: {"s": 2210, "a": 1900, "b": 1650, "c": 1350, "d": 1000},
         }
         
-        # Animation states
+        # Enhanced animation states
         self.title_alpha = 0
+        self.title_scale = 0
         self.rank_scale = 0
+        self.rank_glow_intensity = 0
         self.sparkle_particles = []
+        self.rank_revealed = False
         
-        # Sequential stat animation
-        self.stat_display_delay = 0.5  # Configurable delay before first stat
-        self.stat_interval = 1.0  # Configurable interval between stats (1 second)
+        # Sequential stat animation with "New Best!" support
+        self.stat_display_delay = 0.5
+        self.stat_interval = 1.2  # Slightly longer for "New Best!" animations
         self.stats_to_show = []
         self.current_stat_index = 0
         self.stat_start_time = None
@@ -2520,42 +2529,86 @@ class ResultsScreen:
         self.victory_music_started = False
         self.victory_music_finished = False
         self.rank_music_started = False
+        self.victory_music_duration = 6.0
         
-        # Timing control
-        self.victory_music_duration = 6.0  # Adjust based on your victory music length
-        
-        # Cache colors to prevent lag
+        # Cache colors and save data
         self._cached_colors = {}
+        self._cached_save_data = {}
         
         # Threading
         self.thread_pool = []
         self.result_queue = queue.Queue()
         self.music_thread = None
         self.color_cache_thread = None
-        
-        # Thread completion flags
         self.color_caching_complete = False
         self.music_loading_complete = False
         
-    def configure_timing(self, first_stat_delay=0.5, stat_interval=1.0):
+        # DEBUG: Add debug flag
+        self.debug_mode = True
+        
+    def debug_print(self, message):
+        """Print debug messages if debug mode is enabled"""
+        if self.debug_mode:
+            print(f"[RESULTS_DEBUG] {message}")
+        
+    def configure_timing(self, first_stat_delay=0.5, stat_interval=1.2):
         """Configure the timing for stat animations"""
         self.stat_display_delay = first_stat_delay
         self.stat_interval = stat_interval
         
     def show_results(self, stats, level_index=0):
-        """Display the results screen with stats"""
+        """Display the results screen with stats and save comparison"""
+        self.debug_print(f"=== SHOWING RESULTS FOR LEVEL {level_index} ===")
+        
         self.stats = stats
-        self.current_level_index = level_index  # Store the level index
+        self.current_level_index = level_index
         self.results_shown = True
         self.animation_time = 0
         self.show_time = pygame.time.get_ticks()
         
+        # DEBUG: Log current performance
+        current_time = stats.completion_time
+        current_score = stats.calculate_score() if hasattr(stats, 'calculate_score') else 0
+        current_rank = self.get_level_rank(level_index)
+        
+        self.debug_print(f"Current Performance:")
+        self.debug_print(f"  Time: {current_time:.3f} seconds")
+        self.debug_print(f"  Score: {current_score}")
+        self.debug_print(f"  Rank: {current_rank}")
+        
+        # Cache previous save data BEFORE calling save_level_result
+        self._cache_save_data(level_index)
+        
+        # DEBUG: Log previous best data
+        self.debug_print(f"Previous Best from Save:")
+        self.debug_print(f"  Time: {self._cached_save_data['best_time']}")
+        self.debug_print(f"  Score: {self._cached_save_data['best_score']}")
+        self.debug_print(f"  Rank: {self._cached_save_data['best_rank']}")
+        
+        # Check for improvements MANUALLY before saving
+        is_time_best = current_time < self._cached_save_data['best_time']
+        is_score_best = current_score > self._cached_save_data['best_score']
+        rank_values = {"S": 6, "A": 5, "B": 4, "C": 3, "D": 2, "E": 1}
+        is_rank_best = rank_values[current_rank] > rank_values[self._cached_save_data['best_rank']]
+        
+        self.debug_print(f"Improvement Analysis:")
+        self.debug_print(f"  Time improved? {is_time_best} ({current_time:.3f} < {self._cached_save_data['best_time']:.3f})")
+        self.debug_print(f"  Score improved? {is_score_best} ({current_score} > {self._cached_save_data['best_score']})")
+        self.debug_print(f"  Rank improved? {is_rank_best} ({current_rank} vs {self._cached_save_data['best_rank']})")
+        
+        # Now save the results (this may update the save file)
+        self.improvements = self.game_save.save_level_result(level_index, stats, self)
+        self.debug_print(f"GameSave returned improvements: {self.improvements}")
+        
         # Reset animation values
         self.title_alpha = 0
+        self.title_scale = 0
         self.rank_scale = 0
+        self.rank_glow_intensity = 0
         self.sparkle_particles = []
         self.current_stat_index = 0
         self.stat_start_time = None
+        self.rank_revealed = False
         
         # Reset thread flags
         self.color_caching_complete = False
@@ -2572,13 +2625,46 @@ class ResultsScreen:
         # Start background threads for heavy operations
         self.start_background_threads()
         
+    def _cache_save_data(self, level_index):
+        """Cache previous save data for comparison"""
+        self.debug_print(f"Caching save data for level {level_index}")
+        
+        # Get the raw save data
+        level_data = self.game_save.get_level_best(level_index)
+        self.debug_print(f"Raw level data from save: {level_data}")
+        
+        if level_data:
+            self._cached_save_data = {
+                'best_time': level_data.get('best_time', float('inf')),
+                'best_score': level_data.get('best_score', 0),
+                'best_rank': level_data.get('best_rank', 'E')
+            }
+        else:
+            self.debug_print("No previous save data found - this is a first completion")
+            self._cached_save_data = {
+                'best_time': float('inf'),
+                'best_score': 0,
+                'best_rank': 'E'
+            }
+            
+        self.debug_print(f"Cached save data: {self._cached_save_data}")
+        
     def get_level_rank(self, level_index=None):
         """Get rank for specific level using appropriate thresholds"""
         if level_index is None:
             level_index = self.current_level_index
             
-        # Get thresholds for this level, fall back to level 0 if not found
         thresholds = self.level_thresholds.get(level_index, self.level_thresholds[0])
+        
+        if not hasattr(self.stats, 'get_rank'):
+            # Fallback rank calculation if stats doesn't have get_rank method
+            score = self.stats.calculate_score() if hasattr(self.stats, 'calculate_score') else 0
+            if score >= thresholds["s"]: return "S"
+            elif score >= thresholds["a"]: return "A"
+            elif score >= thresholds["b"]: return "B"
+            elif score >= thresholds["c"]: return "C"
+            elif score >= thresholds["d"]: return "D"
+            else: return "E"
         
         return self.stats.get_rank(
             s=thresholds["s"],
@@ -2590,7 +2676,6 @@ class ResultsScreen:
         
     def start_background_threads(self):
         """Start background threads for heavy operations"""
-        # Thread for color caching
         if self.color_cache_thread is None or not self.color_cache_thread.is_alive():
             self.color_cache_thread = threading.Thread(
                 target=self._cache_stat_colors_threaded, 
@@ -2598,7 +2683,6 @@ class ResultsScreen:
             )
             self.color_cache_thread.start()
         
-        # Thread for music loading
         if self.music_thread is None or not self.music_thread.is_alive():
             self.music_thread = threading.Thread(
                 target=self._load_music_threaded, 
@@ -2616,7 +2700,6 @@ class ResultsScreen:
                     'deaths': self.get_deaths_color(self.stats.deaths)
                 }
                 
-                # Use queue to safely pass results back to main thread
                 self.result_queue.put(('colors_cached', cached_colors))
                 
             except Exception as e:
@@ -2625,7 +2708,6 @@ class ResultsScreen:
     def _load_music_threaded(self):
         """Thread function to load victory music"""
         try:
-            # Simulate music loading preparation (actual loading still needs main thread)
             self.result_queue.put(('music_ready', None))
         except Exception as e:
             self.result_queue.put(('error', f"Music loading error: {e}"))
@@ -2650,16 +2732,13 @@ class ResultsScreen:
     def start_victory_music(self):
         """Start victory music with fadeout of current track"""
         if not self.victory_music_started and self.music_loading_complete:
-            # Fade out current music quickly to prevent overlap
             pygame.mixer.music.fadeout(300)
             
-            # Load and play victory music
             try:
                 pygame.mixer.music.load(os.path.join("assets", "music", "stage clear.mp3"))
                 pygame.mixer.music.play()
                 self.victory_music_started = True
             except pygame.error:
-                # Fallback if music file not found
                 self.victory_music_started = True
                 self.victory_music_finished = True
     
@@ -2668,24 +2747,20 @@ class ResultsScreen:
         if self.rank_music_started:
             return
             
-        # Fade out victory music
         pygame.mixer.music.fadeout(500)
         
         try:
-            # Determine which track to play based on rank
             if rank == "S":
-                pygame.mixer.music.load(os.path.join("assets", "music", "A B rank.mp3"))
-            elif rank in ["A", "B"]:
                 pygame.mixer.music.load(os.path.join("assets", "music", "S rank.mp3"))
+            elif rank in ["A", "B"]:
+                pygame.mixer.music.load(os.path.join("assets", "music", "A B rank.mp3"))
             elif rank == "C":
                 pygame.mixer.music.load(os.path.join("assets", "music", "C rank.mp3"))
             elif rank in ["D", "E"]:
                 pygame.mixer.music.load(os.path.join("assets", "music", "boowhomp.mp3"))
             
-            # Play the selected track
             pygame.mixer.music.play()
         except pygame.error:
-            # Fallback if music files not found
             pass
         
         self.rank_music_started = True
@@ -2695,96 +2770,195 @@ class ResultsScreen:
         if not self.results_shown:
             return
         
-        # Process results from background threads
         self._process_thread_results()
             
         self.animation_time += dt
         current_time = pygame.time.get_ticks()
         elapsed = (current_time - self.show_time) / 1000.0
         
-        # Start victory music when ready
         if not self.victory_music_started and self.music_loading_complete:
             self.start_victory_music()
         
-        # Check if victory music has finished
         if not self.victory_music_finished and elapsed >= self.victory_music_duration:
             self.victory_music_finished = True
         
-        # Animate title fade-in
-        if elapsed < 1.0:
-            self.title_alpha = int(255 * elapsed)
+        # Enhanced title animation with scale and fade
+        if elapsed < 1.5:
+            progress = elapsed / 1.5
+            self.title_alpha = int(255 * min(progress * 2, 1.0))
+            # Bounce scale effect
+            if progress < 0.8:
+                self.title_scale = 0.5 + 0.5 * progress + 0.2 * math.sin(progress * math.pi * 4)
+            else:
+                self.title_scale = 1.0 + 0.1 * math.sin((progress - 0.8) * math.pi * 10)
         else:
             self.title_alpha = 255
+            self.title_scale = 1.0
             
-        # Sequential stat display logic
         self.update_sequential_stats(elapsed)
             
-        # Only animate rank AFTER victory music is finished
+        # Enhanced rank animation
         if self.victory_music_finished:
             rank_start_time = self.victory_music_duration
             rank_elapsed = elapsed - rank_start_time
             
-            # Animate rank scale-in (starts after victory music ends)
-            if rank_elapsed >= 0 and rank_elapsed < 1.0:
-                progress = rank_elapsed
-                # Bounce effect
-                self.rank_scale = 1.2 * (1 - abs(math.sin(progress * math.pi * 3)))
-                if progress > 0.8:
-                    self.rank_scale = 1.0 + 0.2 * math.sin(progress * math.pi * 10)
+            if rank_elapsed >= 0 and rank_elapsed < 2.0:  # Extended rank animation
+                self.rank_revealed = True
+                progress = min(rank_elapsed / 2.0, 1.0)
+                
+                # Multi-stage rank animation
+                if progress < 0.3:
+                    # Initial bounce
+                    bounce_progress = progress / 0.3
+                    self.rank_scale = bounce_progress * 1.5
+                elif progress < 0.7:
+                    # Settle with oscillation
+                    settle_progress = (progress - 0.3) / 0.4
+                    self.rank_scale = 1.5 - 0.5 * settle_progress + 0.2 * math.sin(settle_progress * math.pi * 6)
+                else:
+                    # Final glow pulse
+                    glow_progress = (progress - 0.7) / 0.3
+                    self.rank_scale = 1.0 + 0.1 * math.sin(glow_progress * math.pi * 8)
+                    self.rank_glow_intensity = math.sin(glow_progress * math.pi * 4) * 0.5 + 0.5
                     
-                # Start rank music when rank animation begins
-                if self.stats and not self.rank_music_started:
+                if not self.rank_music_started:
                     self.start_rank_music(self.get_level_rank())
                     
-            elif rank_elapsed >= 1.0:
+            elif rank_elapsed >= 2.0:
                 self.rank_scale = 1.0
+                self.rank_glow_intensity = 0.3 + 0.2 * math.sin(elapsed * 3)  # Gentle pulse
                 
-                # Ensure rank music is started
-                if self.stats and not self.rank_music_started:
+                if not self.rank_music_started:
                     self.start_rank_music(self.get_level_rank())
             
-            # Add sparkle particles for S rank (only after rank is revealed)
+            # Enhanced sparkle system for S rank
             if (self.stats and self.get_level_rank() == "S" and 
-                rank_elapsed > 0.5 and len(self.sparkle_particles) < 20):
-                self.add_sparkle()
+                rank_elapsed > 1.0 and len(self.sparkle_particles) < 30):
+                if rank_elapsed % 0.1 < dt:  # Add sparkles more frequently
+                    self.add_sparkle()
                 
         # Update sparkle particles
         for particle in self.sparkle_particles[:]:
             particle["life"] -= dt
             particle["y"] -= particle["speed"] * dt
             particle["x"] += math.sin(particle["y"] * 0.01) * 2
+            particle["alpha"] = max(0, int(255 * (particle["life"] / particle["max_life"])))
             if particle["life"] <= 0:
                 self.sparkle_particles.remove(particle)
     
     def update_sequential_stats(self, elapsed):
-        """Update sequential stat display logic"""
-        # Initialize stats list if colors are cached and we haven't started yet
+        """Update sequential stat display with 'New Best!' indicators"""
         if (self.color_caching_complete and not self.stats_to_show and 
             elapsed > self.stat_display_delay):
             
-            self.stats_to_show = [
-                {"key": "time", "label": "Time:", "value": self.format_time(self.stats.completion_time), 
-                "color": (255, 255, 255), "alpha": 0, "shown": False},
-                {"key": "rings", "label": "Coins:", "value": str(self.stats.rings_collected), 
-                "color": self._cached_colors.get('rings', (255, 255, 255)), "alpha": 0, "shown": False},
-                {"key": "enemies", "label": "Enemies:", "value": str(self.stats.enemies_defeated), 
-                "color": self._cached_colors.get('enemies', (255, 255, 255)), "alpha": 0, "shown": False},
-            ]
+            self.debug_print("=== BUILDING STATS TO SHOW ===")
             
-            # Only add secrets if more than zero were found
+            # Get current performance data
+            current_score = self.stats.calculate_score() if hasattr(self.stats, 'calculate_score') else 0
+            current_time = self.stats.completion_time
+            current_rank = self.get_level_rank()
+            
+            self.debug_print(f"Building stats with current data:")
+            self.debug_print(f"  Time: {current_time}")
+            self.debug_print(f"  Score: {current_score}")
+            self.debug_print(f"  Cached best time: {self._cached_save_data['best_time']}")
+            self.debug_print(f"  Cached best score: {self._cached_save_data['best_score']}")
+            
+            # Check for improvements using cached data
+            is_time_best = current_time < self._cached_save_data['best_time']
+            is_score_best = current_score > self._cached_save_data['best_score']
+            rank_values = {"S": 6, "A": 5, "B": 4, "C": 3, "D": 2, "E": 1}
+            is_rank_best = rank_values[current_rank] > rank_values[self._cached_save_data['best_rank']]
+            
+            self.debug_print(f"Final improvement flags:")
+            self.debug_print(f"  is_time_best: {is_time_best}")
+            self.debug_print(f"  is_score_best: {is_score_best}")
+            self.debug_print(f"  is_rank_best: {is_rank_best}")
+            
+            self.stats_to_show = []
+            
+            # Time stat
+            self.stats_to_show.append({
+                "key": "time", 
+                "label": "Time:", 
+                "value": self.format_time(current_time),
+                "color": (100, 255, 150) if is_time_best else (255, 255, 255),
+                "alpha": 0, 
+                "shown": False,
+                "is_best": is_time_best,
+                "shift_offset": 0,
+                "best_alpha": 0
+            })
+            
+            # Rings stat
+            self.stats_to_show.append({
+                "key": "rings", 
+                "label": "Coins:", 
+                "value": str(self.stats.rings_collected),
+                "color": self._cached_colors.get('rings', (255, 255, 255)),
+                "alpha": 0, 
+                "shown": False,
+                "is_best": False,  # Rings don't have best tracking yet
+                "shift_offset": 0,
+                "best_alpha": 0
+            })
+            
+            # Enemies stat
+            self.stats_to_show.append({
+                "key": "enemies", 
+                "label": "Enemies:", 
+                "value": str(self.stats.enemies_defeated),
+                "color": self._cached_colors.get('enemies', (255, 255, 255)),
+                "alpha": 0, 
+                "shown": False,
+                "is_best": False,  # Enemies don't have best tracking yet
+                "shift_offset": 0,
+                "best_alpha": 0
+            })
+            
+            # Secrets (if any)
             if self.stats.secrets_found > 0:
                 self.stats_to_show.append({
-                    "key": "secrets", "label": "Secrets:", "value": str(self.stats.secrets_found), 
-                    "color": (255, 255, 0), "alpha": 0, "shown": False  # Yellow color
+                    "key": "secrets", 
+                    "label": "Secrets:", 
+                    "value": str(self.stats.secrets_found),
+                    "color": (255, 255, 0),
+                    "alpha": 0, 
+                    "shown": False,
+                    "is_best": False,
+                    "shift_offset": 0,
+                    "best_alpha": 0
                 })
             
-            # Add remaining stats
-            self.stats_to_show.extend([
-                {"key": "deaths", "label": "Deaths:", "value": str(self.stats.deaths), 
-                "color": self._cached_colors.get('deaths', (255, 255, 255)), "alpha": 0, "shown": False},
-                {"key": "score", "label": "Score:", "value": str(self.stats.calculate_score()), 
-                "color": (255, 255, 100), "alpha": 0, "shown": False}
-            ])
+            # Deaths stat
+            self.stats_to_show.append({
+                "key": "deaths", 
+                "label": "Deaths:", 
+                "value": str(self.stats.deaths),
+                "color": self._cached_colors.get('deaths', (255, 255, 255)),
+                "alpha": 0, 
+                "shown": False,
+                "is_best": False,
+                "shift_offset": 0,
+                "best_alpha": 0
+            })
+            
+            # Score stat
+            self.stats_to_show.append({
+                "key": "score", 
+                "label": "Score:", 
+                "value": str(current_score),
+                "color": (255, 255, 100) if not is_score_best else (100, 255, 150),
+                "alpha": 0, 
+                "shown": False,
+                "is_best": is_score_best,
+                "shift_offset": 0,
+                "best_alpha": 0
+            })
+            
+            self.debug_print(f"Created {len(self.stats_to_show)} stats to show")
+            for i, stat in enumerate(self.stats_to_show):
+                self.debug_print(f"  {i}: {stat['key']} = {stat['value']}, is_best = {stat['is_best']}")
             
             self.stat_start_time = elapsed
         
@@ -2798,19 +2972,29 @@ class ResultsScreen:
                 if time_since_start >= stat_should_start:
                     if not stat["shown"]:
                         stat["shown"] = True
+                        if stat["is_best"]:
+                            self.debug_print(f"Stat {stat['key']} marked as NEW BEST!")
                     
                     # Animate alpha for this stat
-                    stat_progress = min((time_since_start - stat_should_start) / 0.5, 1.0)
+                    stat_progress = min((time_since_start - stat_should_start) / 0.8, 1.0)
                     stat["alpha"] = int(255 * stat_progress)
+                    
+                    # Animate "New Best!" effects
+                    if stat["is_best"] and stat_progress > 0.5:
+                        best_progress = min((stat_progress - 0.5) / 0.5, 1.0)
+                        stat["shift_offset"] = int(-60 * best_progress)  # Shift left
+                        stat["best_alpha"] = int(255 * best_progress)
+                        
+                        if best_progress > 0.8 and stat["key"] in ["time", "score"]:
+                            self.debug_print(f"NEW BEST animation playing for {stat['key']}!")
     
     def get_rings_color(self, rings_count):
-        """Get color for rings based on count (higher = whiter, lower = more red)"""
-        max_rings = 20  # Adjust based on your game's ring distribution
+        """Get color for rings based on count"""
+        max_rings = 20
         
         if rings_count >= max_rings:
-            return (255, 255, 255)  # Pure white for excellent
+            return (255, 255, 255)
         
-        # Scale from red to white based on ring count
         ratio = min(rings_count / max_rings, 1.0)
         red = 255
         green = int(255 * ratio)
@@ -2819,13 +3003,12 @@ class ResultsScreen:
         return (red, green, blue)
     
     def get_enemies_color(self, enemy_count):
-        """Get color for enemy kills (higher = whiter, lower = more red)"""
-        max_enemies = 50  # Adjust based on your game's enemy distribution
+        """Get color for enemy kills"""
+        max_enemies = 50
         
         if enemy_count >= max_enemies:
-            return (255, 255, 255)  # Pure white for excellent
+            return (255, 255, 255)
         
-        # Scale from red to white based on enemy count
         ratio = min(enemy_count / max_enemies, 1.0)
         red = 255
         green = int(255 * ratio)
@@ -2834,11 +3017,10 @@ class ResultsScreen:
         return (red, green, blue)
     
     def get_deaths_color(self, death_count):
-        """Get color for deaths (higher = more red, 5 is max red)"""
+        """Get color for deaths"""
         if death_count == 0:
-            return (255, 255, 255)  # Pure white for no deaths
+            return (255, 255, 255)
         
-        # Scale from white to red, with 5 being maximum red
         ratio = min(death_count / 5.0, 1.0)
         red = 255
         green = int(255 * (1 - ratio))
@@ -2847,125 +3029,241 @@ class ResultsScreen:
         return (red, green, blue)
     
     def add_sparkle(self):
-        """Add a sparkle particle effect"""
+        """Add enhanced sparkle particle effect"""
         import random
         sparkle = {
-            "x": random.randint(0, self.screen_width),
+            "x": random.randint(50, self.screen_width - 50),
             "y": self.screen_height + 50,
-            "speed": random.randint(100, 200),
-            "life": random.uniform(3, 5),
-            "size": random.randint(2, 6),
-            "color": (255, 255, 255)
+            "speed": random.randint(80, 150),
+            "life": random.uniform(2, 4),
+            "max_life": random.uniform(2, 4),
+            "size": random.randint(3, 8),
+            "color": random.choice([(255, 255, 255), (255, 255, 0), (255, 215, 0)]),
+            "alpha": 255
         }
+        sparkle["max_life"] = sparkle["life"]
         self.sparkle_particles.append(sparkle)
     
     def draw(self, screen, level_index=0):
-        """Draw the results screen"""
+        """Draw the enhanced results screen"""
         if not self.results_shown or not self.stats:
             return
         
-        # Update current level index if provided
         if level_index != self.current_level_index:
             self.current_level_index = level_index
             
-        # Dark semi-transparent background
+        # Enhanced background
         overlay = pygame.Surface((self.screen_width, self.screen_height))
-        overlay.set_alpha(180)
-        overlay.fill((0, 0, 0))
+        overlay.set_alpha(190)
+        overlay.fill((5, 5, 15))  # Darker, more dramatic background
         screen.blit(overlay, (0, 0))
         
-        # Draw animated background effect
         self.draw_background_effect(screen)
         
-        # Title
-        title_surf = self.font_large.render("LEVEL COMPLETE!", True, (255, 255, 255))
-        title_surf.set_alpha(self.title_alpha)
-        title_rect = title_surf.get_rect(center=(self.screen_width // 2, 100))
-        screen.blit(title_surf, title_rect)
+        # Enhanced title with scaling
+        if self.title_scale > 0:
+            title_text = "LEVEL COMPLETE!"
+            title_surf = self.font_title.render(title_text, True, (255, 255, 255))
+            title_surf.set_alpha(self.title_alpha)
+            
+            # Apply scaling
+            if self.title_scale != 1.0:
+                original_size = title_surf.get_size()
+                new_size = (int(original_size[0] * self.title_scale), int(original_size[1] * self.title_scale))
+                title_surf = pygame.transform.scale(title_surf, new_size)
+            
+            title_rect = title_surf.get_rect(center=(self.screen_width // 2, 80))
+            
+            # Add subtle glow to title
+            glow_surf = title_surf.copy()
+            glow_surf.set_alpha(self.title_alpha // 3)
+            for offset in [(2, 2), (-2, -2), (2, -2), (-2, 2)]:
+                glow_rect = title_rect.copy()
+                glow_rect.x += offset[0]
+                glow_rect.y += offset[1]
+                screen.blit(glow_surf, glow_rect)
+            
+            screen.blit(title_surf, title_rect)
         
-        # Sequential stats display
+        # Enhanced sequential stats
         self.draw_sequential_stats(screen)
             
-        # Rank display (only show if victory music is finished and rank is animating)
-        if self.victory_music_finished and self.rank_scale > 0:
-            self.draw_rank(screen)
+        # Enhanced rank display
+        if self.rank_revealed and self.rank_scale > 0:
+            self.draw_enhanced_rank(screen)
 
-        # Draw sparkles for S rank
+        # Enhanced sparkles
         for particle in self.sparkle_particles:
-            pygame.draw.circle(screen, particle["color"], 
-                             (int(particle["x"]), int(particle["y"])), 
-                             int(particle["size"]))
+            if particle["alpha"] > 0:
+                # Create sparkle with varying transparency
+                sparkle_surf = pygame.Surface((particle["size"] * 2, particle["size"] * 2), pygame.SRCALPHA)
+                sparkle_color = (*particle["color"], particle["alpha"])
+                pygame.draw.circle(sparkle_surf, sparkle_color[:3], 
+                                 (particle["size"], particle["size"]), particle["size"])
+                sparkle_surf.set_alpha(particle["alpha"])
+                screen.blit(sparkle_surf, (int(particle["x"] - particle["size"]), 
+                                         int(particle["y"] - particle["size"])))
     
     def draw_background_effect(self, screen):
-        """Draw animated background effects"""
+        """Draw enhanced animated background effects"""
         current_time = pygame.time.get_ticks() / 1000.0
         
-        # Animated gradient rays
-        for i in range(8):
-            angle = (i * math.pi / 4) + (current_time * 0.5)
-            end_x = self.screen_width // 2 + math.cos(angle) * 400
-            end_y = self.screen_height // 2 + math.sin(angle) * 300
-            
-            # Create gradient effect with multiple lines
-            for j in range(10):
-                alpha = 30 - (j * 3)
-                if alpha > 0:
-                    start_x = self.screen_width // 2 + math.cos(angle) * (j * 5)
-                    start_y = self.screen_height // 2 + math.sin(angle) * (j * 5)
-                    
-                    pygame.draw.line(screen, (50, 50, 100), 
-                                   (start_x, start_y), (end_x, end_y), 2)
+        # Multiple layers of animated rays
+        for layer in range(2):
+            for i in range(12):
+                angle = (i * math.pi / 6) + (current_time * (0.3 + layer * 0.2))
+                distance = 500 + layer * 100
+                end_x = self.screen_width // 2 + math.cos(angle) * distance
+                end_y = self.screen_height // 2 + math.sin(angle) * distance
+                
+                # Create multi-layered gradient effect
+                for j in range(8):
+                    alpha = max(0, 40 - (j * 5) - layer * 15)
+                    if alpha > 0:
+                        start_distance = j * 8
+                        start_x = self.screen_width // 2 + math.cos(angle) * start_distance
+                        start_y = self.screen_height // 2 + math.sin(angle) * start_distance
+                        
+                        color_intensity = 80 - layer * 30
+                        ray_color = (color_intensity, color_intensity // 2, color_intensity + 50)
+                        
+                        ray_surf = pygame.Surface((2, 2), pygame.SRCALPHA)
+                        ray_surf.fill((*ray_color, alpha))
+                        
+                        pygame.draw.line(screen, ray_color, 
+                                       (start_x, start_y), (end_x, end_y), 1 + layer)
     
     def draw_sequential_stats(self, screen):
-        """Draw the statistics sequentially"""
+        """Draw statistics with 'New Best!' indicators"""
         if not self.stats_to_show:
             return
             
-        stats_y = 200
-        line_height = 50
+        stats_y = 180
+        line_height = 45
         
         for i, stat_info in enumerate(self.stats_to_show):
             if stat_info["alpha"] > 0:
                 y_pos = stats_y + (i * line_height)
+                base_x = self.screen_width // 2
                 
-                # Label
-                label_surf = self.font_medium.render(stat_info["label"], True, (200, 200, 200))
+                # Apply horizontal shift for "New Best!" stats
+                shift = stat_info["shift_offset"]
+                
+                # Draw stat label
+                label_surf = self.font_medium.render(stat_info["label"], True, (220, 220, 220))
                 label_surf.set_alpha(stat_info["alpha"])
-                label_rect = label_surf.get_rect(center=(self.screen_width // 2 - 100, y_pos))
+                label_rect = label_surf.get_rect(center=(base_x - 120 + shift, y_pos))
                 screen.blit(label_surf, label_rect)
                 
-                # Value
+                # Draw stat value with enhanced styling
                 value_surf = self.font_medium.render(stat_info["value"], True, stat_info["color"])
                 value_surf.set_alpha(stat_info["alpha"])
-                value_rect = value_surf.get_rect(center=(self.screen_width // 2 + 100, y_pos))
+                value_rect = value_surf.get_rect(center=(base_x + 80 + shift, y_pos))
+                
+                # Add glow effect for improved stats
+                if stat_info["is_best"]:
+                    glow_surf = self.font_medium.render(stat_info["value"], True, (255, 255, 255))
+                    glow_surf.set_alpha(min(stat_info["alpha"] // 3, 80))
+                    for glow_offset in [(1, 1), (-1, -1), (1, -1), (-1, 1)]:
+                        glow_rect = value_rect.copy()
+                        glow_rect.x += glow_offset[0]
+                        glow_rect.y += glow_offset[1]
+                        screen.blit(glow_surf, glow_rect)
+                
                 screen.blit(value_surf, value_rect)
+                
+                # Draw "New Best!" indicator
+                if stat_info["is_best"] and stat_info["best_alpha"] > 0:
+                    best_text = "New Best!"
+                    best_surf = self.font_small.render(best_text, True, (255, 215, 0))  # Gold color
+                    best_surf.set_alpha(stat_info["best_alpha"])
+                    best_rect = best_surf.get_rect(center=(base_x + 200, y_pos))
+                    
+                    # Add pulsing effect
+                    pulse = 1.0 + 0.2 * math.sin(pygame.time.get_ticks() * 0.01)
+                    if pulse != 1.0:
+                        original_size = best_surf.get_size()
+                        new_size = (int(original_size[0] * pulse), int(original_size[1] * pulse))
+                        best_surf = pygame.transform.scale(best_surf, new_size)
+                        best_rect = best_surf.get_rect(center=(base_x + 200, y_pos))
+                    
+                    # Background highlight for "New Best!"
+                    highlight_rect = pygame.Rect(best_rect.x - 10, best_rect.y - 5, 
+                                               best_rect.width + 20, best_rect.height + 10)
+                    highlight_surf = pygame.Surface((highlight_rect.width, highlight_rect.height), pygame.SRCALPHA)
+                    highlight_color = (255, 215, 0, min(stat_info["best_alpha"] // 4, 60))
+                    highlight_surf.fill(highlight_color)
+                    screen.blit(highlight_surf, highlight_rect)
+                    
+                    screen.blit(best_surf, best_rect)
     
-    def draw_rank(self, screen):
-        """Draw the rank with scaling animation using level-specific thresholds"""
+    def draw_enhanced_rank(self, screen):
+        """Draw rank with enhanced visual effects"""
         rank = self.get_level_rank()
         rank_color = self.rank_colors.get(rank, (255, 255, 255))
         
-        # Scale the font size based on animation
-        scaled_size = int(120 * self.rank_scale)
-        if scaled_size > 0:
-            try:
-                rank_font = pygame.font.Font(None, scaled_size)
-                rank_surf = rank_font.render(f"RANK: {rank}", True, rank_color)
+        # Enhanced scaling with size limits
+        scaled_size = max(10, min(int(60 * self.rank_scale), 120))
+        
+        try:
+            rank_font = pygame.font.Font(daFont, scaled_size)
+            rank_text = f"RANK: {rank}"
+            rank_surf = rank_font.render(rank_text, True, rank_color)
+            
+            center_pos = (self.screen_width // 2, 480)
+            
+            # Multi-layer glow effect based on rank
+            glow_layers = 3 if rank in ["S", "A"] else 1
+            for layer in range(glow_layers):
+                glow_intensity = int((self.rank_glow_intensity * 150) / (layer + 1))
+                if glow_intensity > 0:
+                    glow_surf = rank_font.render(rank_text, True, (255, 255, 255))
+                    glow_surf.set_alpha(glow_intensity)
+                    
+                    offset = (layer + 1) * 2
+                    for glow_offset in [(offset, offset), (-offset, -offset), 
+                                      (offset, -offset), (-offset, offset)]:
+                        glow_rect = rank_surf.get_rect(center=(center_pos[0] + glow_offset[0], 
+                                                             center_pos[1] + glow_offset[1]))
+                        screen.blit(glow_surf, glow_rect)
+            
+            # Draw main rank text
+            rank_rect = rank_surf.get_rect(center=center_pos)
+            screen.blit(rank_surf, rank_rect)
+            
+            # Add rank-specific visual effects
+            if rank == "S":
+                # Golden particle ring around S rank
+                particle_count = 8
+                ring_radius = 100
+                current_time = pygame.time.get_ticks() / 1000.0
                 
-                # Add glow effect for higher ranks
-                if rank in ["S", "A"]:
-                    glow_surf = rank_font.render(f"RANK: {rank}", True, (255, 255, 255))
-                    glow_rect = glow_surf.get_rect(center=(self.screen_width // 2 + 2, 500 + 2))
-                    glow_surf.set_alpha(100)
-                    screen.blit(glow_surf, glow_rect)
+                for i in range(particle_count):
+                    angle = (i * 2 * math.pi / particle_count) + (current_time * 2)
+                    particle_x = center_pos[0] + math.cos(angle) * ring_radius
+                    particle_y = center_pos[1] + math.sin(angle) * ring_radius
+                    
+                    particle_surf = pygame.Surface((8, 8), pygame.SRCALPHA)
+                    particle_alpha = int(150 + 100 * math.sin(current_time * 4 + i))
+                    pygame.draw.circle(particle_surf, (255, 215, 0, particle_alpha), (4, 4), 4)
+                    screen.blit(particle_surf, (int(particle_x - 4), int(particle_y - 4)))
+            
+            elif rank in ["A", "B"]:
+                # Pulsing border for A/B ranks
+                border_alpha = int(100 + 50 * math.sin(pygame.time.get_ticks() * 0.005))
+                border_color = (*rank_color, border_alpha)
+                border_rect = pygame.Rect(rank_rect.x - 20, rank_rect.y - 10, 
+                                        rank_rect.width + 40, rank_rect.height + 20)
                 
-                rank_rect = rank_surf.get_rect(center=(self.screen_width // 2, 500))
-                screen.blit(rank_surf, rank_rect)
-            except:
-                # Fallback if font scaling fails
-                rank_surf = self.font_large.render(f"RANK: {rank}", True, rank_color)
-                rank_rect = rank_surf.get_rect(center=(self.screen_width // 2, 500))
-                screen.blit(rank_surf, rank_rect)
+                border_surf = pygame.Surface((border_rect.width, border_rect.height), pygame.SRCALPHA)
+                pygame.draw.rect(border_surf, border_color, border_surf.get_rect(), 3)
+                screen.blit(border_surf, border_rect)
+                
+        except Exception as e:
+            # Fallback rendering
+            fallback_surf = self.font_large.render(f"RANK: {rank}", True, rank_color)
+            fallback_rect = fallback_surf.get_rect(center=(self.screen_width // 2, 480))
+            screen.blit(fallback_surf, fallback_rect)
     
     def format_time(self, time_seconds):
         """Format time as MM:SS.ss"""
@@ -2979,25 +3277,22 @@ class ResultsScreen:
             return True
         current_time = pygame.time.get_ticks()
         elapsed = (current_time - self.show_time) / 1000.0
-        # Extended time to account for victory music + rank animation + sequential stats
-        total_stat_time = len(self.stats_to_show) * self.stat_interval if self.stats_to_show else 5.0
-        return elapsed > (self.victory_music_duration + 3.0 + total_stat_time)
+        total_stat_time = len(self.stats_to_show) * self.stat_interval if self.stats_to_show else 6.0
+        return elapsed > (self.victory_music_duration + 4.0 + total_stat_time)
     
     def hide(self):
         """Hide the results screen and clean up threads"""
         self.results_shown = False
         
-        # Clean up any running threads
         for thread in self.thread_pool:
             if thread.is_alive():
-                thread.join(timeout=0.1)  # Don't wait too long
+                thread.join(timeout=0.1)
         
         self.thread_pool.clear()
     
     def cleanup(self):
         """Clean up resources when done"""
         self.hide()
-        # Clear any remaining queue items
         while not self.result_queue.empty():
             try:
                 self.result_queue.get_nowait()
@@ -3097,6 +3392,27 @@ class GameSave:
         if level_key in self.data["levels"]:
             return self.data["levels"][level_key]
         return None
+    
+    def display_best_time(self, level_index):
+        """Display the best time for a level in MM:SS.ss format"""
+        level_data = self.get_level_best(level_index)
+        if level_data and level_data["best_time"] < float('inf'):
+            return self.format_time(level_data["best_time"])
+        return "--:--:--"
+    
+    def display_best_rank(self, level_index):
+        """Display the best rank for a level"""
+        level_data = self.get_level_best(level_index)
+        if level_data:
+            return level_data["best_rank"]
+        return "N/A"
+    
+    def display_best_score(self, level_index):
+        """Display the best score for a level"""
+        level_data = self.get_level_best(level_index)
+        if level_data:
+            return level_data["best_score"]
+        return 0
     
     def is_level_completed(self, level_index):
         """Check if a level has been completed"""

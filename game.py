@@ -1761,11 +1761,12 @@ class Game:
         # Draw navigation instructions with better styling
         if hasattr(self, '_small_font'):
             instructions = [
-                "A/D or LEFT/RIGHT or drag with mouse to navigate",
-                "Enter, space or left click to select"
+                f"Best Time: {self._game_save.display_best_time(self._selected_level)}",
+                f"Rank: {self._game_save.display_best_rank(self._selected_level)}",
+                f"High Score: {self._game_save.display_best_score(self._selected_level)}",
             ]
             
-            y_offset = SCREEN_HEIGHT - 140
+            y_offset = SCREEN_HEIGHT - 180
             instruction_outline_color = (0, 0, 0)
             instruction_text_color = "WHITE"
             outline_width = 1
@@ -1953,7 +1954,7 @@ class Game:
         def render_game():
             self.update(dt)
             self.render()
-
+    
         # 1. Fade to black from current state
         pygame.mixer_music.fadeout(500)
         SceneManager.fade_to_black(self._screen, render_main_menu, self._fade_duration)

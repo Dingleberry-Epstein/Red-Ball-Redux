@@ -77,7 +77,7 @@ class PymunkLevel:
             # Add timer and stats systems
         self._timer = LevelTimer()
         self._stats = GameStats()
-        self._results_screen = ResultsScreen(SCREEN_WIDTH, SCREEN_HEIGHT)
+        self._results_screen = ResultsScreen(SCREEN_WIDTH, SCREEN_HEIGHT, self._gamesave)
         self._showing_results = False
 
         # Load the level
@@ -1361,7 +1361,6 @@ class PymunkLevel:
         """Reset the ball to the last checkpoint or spawn point"""
         if not self._ball.is_dead:
             self._ball.death()
-            self.player_died()
 
         if self._ball.is_dead:
             if self._checkpoints:
@@ -1376,6 +1375,7 @@ class PymunkLevel:
 
             # Create a new ball
             self._ball = PurePymunkBall(self._physics, spawn_x, spawn_y)
+            self.player_died()
 
     def create_body_from_mask(self, surface, x, y, friction=0.8, threshold=128):
         """Create a polygon shape from a surface mask - for precise slopes"""
