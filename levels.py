@@ -1468,13 +1468,13 @@ class PymunkLevel:
     
 class CaveLevel(PymunkLevel):
     """Cave-themed level with fog particle effects, using optimized rendering"""
-    def __init__(self, spawn, tmx_map=None, level_index=2):
+    def __init__(self, spawn, tmx_map=None, level_index=2, gamesave=None):
         # Call the optimized parent class constructor but disable default music
-        super().__init__(spawn, tmx_map, play_music=False, level_index=2)
+        super().__init__(spawn, tmx_map, play_music=False, level_index=2, gamesave=gamesave)
         self._level_index = level_index  # Store the level index for music and stats
         # Set cave-specific music
         self._setup_cave_music()
-        
+        self._gamesave = gamesave
         # Override the parallax background with cave-themed images
         self._setup_cave_background()
     
@@ -1633,13 +1633,13 @@ class CaveLevel(PymunkLevel):
 class SpaceLevel(PymunkLevel):
     """Space-themed level with low gravity and space backgrounds"""
     
-    def __init__(self, spawn, tmx_map=None, level_index=4):
+    def __init__(self, spawn, tmx_map=None, level_index=4, gamesave=None):
         # Call parent constructor with disabled music
-        super().__init__(spawn, tmx_map, play_music=False, level_index=4)
+        super().__init__(spawn, tmx_map, play_music=False, level_index=4, gamesave=gamesave)
         self._level_index = level_index  # Store the level index for music and stats
         # Set space-specific music
         self._setup_space_music()
-        
+        self._gamesave = gamesave
         # Override gravity with a much lower value
         self._physics.space.gravity = (0, 450)  # Adjusted for space-like conditions
         

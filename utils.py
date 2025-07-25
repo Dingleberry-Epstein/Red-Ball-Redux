@@ -1,5 +1,8 @@
-import pygame, os, pymunk, pygame_gui, random, math, time, threading, queue, json
+import pygame, os, pymunk, pygame_gui, random, math, time, threading, queue, json, base64
 from constants import *
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 pygame.init()
 
@@ -2507,7 +2510,7 @@ class ResultsScreen:
             1: {"s": 1365, "a": 1200, "b": 1050, "c": 850, "d": 650},
             2: {"s": 1720, "a": 1500, "b": 1300, "c": 1050, "d": 800},
             3: {"s": 1770, "a": 1565, "b": 1380, "c": 1150, "d": 850},
-            4: {"s": 2210, "a": 1900, "b": 1650, "c": 1350, "d": 1000},
+            4: {"s": 3665, "a": 3220, "b": 2860, "c": 2380, "d": 1760},
         }
         
         # Enhanced animation states
@@ -3300,19 +3303,77 @@ class ResultsScreen:
                 break
 
 class GameSave:
-    """Simple save system for game progress"""
-    def __init__(self, save_file="game_save.json"):
+    """Secure save system for game progress with encryption"""
+    def __init__(self, save_file="game_save.dat", password=None):
         self.save_file = save_file
+        self.password = password or self._get_default_password()
+        self.salt = self._get_or_create_salt()
+        self.fernet = self._create_fernet()
         self.data = self.load_save()
     
+    def _get_default_password(self):
+        """Generate a default password based on machine characteristics.
+        In production, you might want to use more sophisticated methods."""
+        import platform
+        import getpass
+        
+        # Create a password from system info - this makes saves machine-specific
+        system_info = f"{platform.node()}-{platform.system()}-{getpass.getuser()}"
+        return system_info.encode()
+    
+    def _get_or_create_salt(self):
+        """Get existing salt or create new one. Salt file is stored separately."""
+        salt_file = self.save_file + ".salt"
+        
+        if os.path.exists(salt_file):
+            try:
+                with open(salt_file, 'rb') as f:
+                    return f.read()
+            except IOError:
+                pass
+        
+        # Create new salt
+        salt = os.urandom(16)  # 16 bytes = 128 bits
+        try:
+            with open(salt_file, 'wb') as f:
+                f.write(salt)
+        except IOError as e:
+            print(f"Warning: Could not save salt file: {e}")
+        
+        return salt
+    
+    def _create_fernet(self):
+        """Create Fernet cipher from password and salt"""
+        # Derive key from password using PBKDF2
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,  # 32 bytes = 256 bits for Fernet
+            salt=self.salt,
+            iterations=100000,  # Recommended minimum
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(self.password))
+        return Fernet(key)
+    
     def load_save(self):
-        """Load save data from file, create new if doesn't exist"""
+        """Load and decrypt save data from file, create new if doesn't exist"""
         if os.path.exists(self.save_file):
             try:
-                with open(self.save_file, 'r') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, IOError):
-                print("Save file corrupted, creating new save")
+                with open(self.save_file, 'rb') as f:
+                    encrypted_data = f.read()
+                
+                # Decrypt the data
+                decrypted_data = self.fernet.decrypt(encrypted_data)
+                return json.loads(decrypted_data.decode('utf-8'))
+                
+            except Exception as e:
+                print(f"Save file corrupted or invalid: {e}")
+                # Backup the corrupted file
+                backup_file = self.save_file + ".backup"
+                try:
+                    os.rename(self.save_file, backup_file)
+                    print(f"Corrupted save moved to {backup_file}")
+                except:
+                    pass
                 return self.create_new_save()
         else:
             return self.create_new_save()
@@ -3322,11 +3383,39 @@ class GameSave:
         return {
             "levels": {},  # Will store data for each level
             "total_playtime": 0.0,
-            "version": "1.0"
+            "version": "1.0",
+            "checksum": self._calculate_checksum({})  # Add integrity check
         }
+    
+    def _calculate_checksum(self, level_data):
+        """Calculate a simple checksum for additional integrity verification"""
+        import hashlib
+        
+        # Create a string representation of critical data
+        checksum_data = json.dumps(level_data, sort_keys=True)
+        return hashlib.md5(checksum_data.encode()).hexdigest()
+    
+    def _verify_integrity(self):
+        """Verify save file integrity using checksum"""
+        if "checksum" not in self.data:
+            return True  # Old save format, skip verification
+        
+        stored_checksum = self.data["checksum"]
+        current_checksum = self._calculate_checksum(self.data["levels"])
+        
+        if stored_checksum != current_checksum:
+            print("Warning: Save file integrity check failed - possible tampering detected")
+            return False
+        
+        return True
     
     def save_level_result(self, level_index, stats, results_screen):
         """Save the results for a specific level - only saves if there's an improvement"""
+        # Verify integrity before making changes
+        if not self._verify_integrity():
+            print("Save integrity compromised - creating new save")
+            self.data = self.create_new_save()
+        
         # Get the rank using the results screen's level-specific thresholds
         rank = results_screen.get_level_rank(level_index)
         score = stats.calculate_score()
@@ -3373,6 +3462,9 @@ class GameSave:
         
         # Always update total playtime
         self.data["total_playtime"] += time
+        
+        # Update checksum before saving
+        self.data["checksum"] = self._calculate_checksum(self.data["levels"])
         
         # Only save to file if there were improvements or first completion
         if save_needed or level_data["attempts"] == 1:
@@ -3424,11 +3516,19 @@ class GameSave:
         return self.data["total_playtime"]
     
     def save_to_file(self):
-        """Save current data to file"""
+        """Encrypt and save current data to file"""
         try:
-            with open(self.save_file, 'w') as f:
-                json.dump(self.data, f, indent=2)
-        except IOError as e:
+            # Convert data to JSON string
+            json_data = json.dumps(self.data, indent=2)
+            
+            # Encrypt the JSON data
+            encrypted_data = self.fernet.encrypt(json_data.encode('utf-8'))
+            
+            # Write encrypted data to file
+            with open(self.save_file, 'wb') as f:
+                f.write(encrypted_data)
+                
+        except Exception as e:
             print(f"Failed to save game: {e}")
     
     def format_time(self, time_seconds):
@@ -3438,3 +3538,12 @@ class GameSave:
         minutes = int(time_seconds // 60)
         seconds = time_seconds % 60
         return f"{minutes:02d}:{seconds:05.2f}"
+    
+    def export_save(self, export_file):
+        """Export save data to a readable JSON file (for debugging/backup)"""
+        try:
+            with open(export_file, 'w') as f:
+                json.dump(self.data, f, indent=2)
+            print(f"Save exported to {export_file}")
+        except Exception as e:
+            print(f"Failed to export save: {e}")

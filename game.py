@@ -529,7 +529,7 @@ class Game:
         
         # Warning text
         self._autosave_warning_text = [
-            "This game has an autosave feature.",
+            "This game has an autosave feature",
             "Please do not power off the system or close the game",
             "while this icon is visible"
         ]
@@ -975,9 +975,9 @@ class Game:
 
         # Check if the level index is 3 or 4
         if level_index in [2, 3]:
-            self._level = CaveLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index], level_index = level_index)
+            self._level = CaveLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index], level_index = level_index, gamesave=self._game_save)
         elif level_index == 4:
-            self._level = SpaceLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index], level_index = level_index)
+            self._level = SpaceLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index], level_index = level_index, gamesave=self._game_save)
         elif level_index == 5:
             self._level = BossArena(tmx_map=levels[level_index], spawn=spawn_points[level_index])
         else:
