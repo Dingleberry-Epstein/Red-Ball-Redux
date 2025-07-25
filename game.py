@@ -1,7 +1,7 @@
 import pygame, pygame_gui, os, random, objects, threading, time
 from constants import *
 from levels import SpaceLevel, CaveLevel, PymunkLevel, levels, spawn_points, BossArena
-from utils import PhysicsManager, SceneManager, MapSystem
+from utils import PhysicsManager, SceneManager, MapSystem, GameSave
 
 class Game:
     """Main game using impulse-based ball movement with improved pygame-gui UI"""
@@ -19,6 +19,10 @@ class Game:
         self._state = "intro"  # Start with intro state
         self._credits = None
         
+        self._game_save = GameSave()  # Initialize game save system
+
+        self._setup_autosave_warning()
+
         self._player_has_map = False
         self._setup_loading_tips()
 
@@ -88,6 +92,14 @@ class Game:
         self._selected_level = 0
         self._level_positions = []
         self._level_rects = []
+        self._mouse_dragging = False
+        self._drag_start_pos = None
+        self._drag_start_scroll = 0
+        self._drag_velocity = 0
+        self._last_mouse_pos = None
+        self._drag_history = []  # Store recent drag positions for velocity calculation
+        self._momentum_decay = 0.95  # How quickly momentum fades
+        self._min_drag_distance = 5  # Minimum distance to start dragging
         
         # Configuration for level images (add this to your game initialization)
         self._level_image_paths = {
@@ -119,14 +131,13 @@ class Game:
             "Tip: The cake is... not relevant to this game, but we thought we'd say it anyway.",
             "Tip: Press 'M' to open the map... if you've found one.",
             "Tip: Can't complete a level? Sometimes, speed is key. - JackSepticEye.",
-            "Tip: You can reset the ball with 'R' - useful if you're stuck.",
+            "Tip: You can respawn with 'R' - useful if you're stuck.",
             "Tip: Some objects can be interacted with by pressing 'E'. Don't worry, it's obvious which ones.",
             "Tip: You can toggle music and audio in the settings screen, once I've added it.",
             "Tip: Don't forget: maps only unlock when collected in-game.",
             "Tip: Pressing 'ESC' does not bring up the main menu — it's how you rage quit in style.",
             "Tip: Game dev is hard. I made this in two weeks.",
-            "Tip: If you find a bug, please report it. Not that I can fix it, but still.",
-            "Tip: There are no game saves yet, so don't get too attached to your progress."
+            "Tip: If you find a bug, please report it. Not that I can fix it, but still."
         ]
         
         # Pick initial random tip
@@ -431,7 +442,7 @@ class Game:
         """Load game fonts with fallback to system fonts if needed"""
         try:
             self._pixel_font = pygame.font.Font(os.path.join("assets", "Daydream.ttf"), 32)
-            self._small_font = pygame.font.Font(os.path.join("assets", "Daydream.ttf"), 18)
+            self._small_font = pygame.font.Font(os.path.join("assets", "Daydream.ttf"), 15)
             self._menu_font = pygame.font.Font(os.path.join("assets", "Daydream.ttf"), 24)
         except pygame.error as e:
             print(f"Error loading font: {e}")
@@ -509,30 +520,211 @@ class Game:
     def map_system(self):
         """Get the map system"""
         return self._map_system
+    
+    def _setup_autosave_warning(self):
+        """Setup autosave warning splash screen with custom loading animation"""
+        # Timer and duration
+        self._autosave_timer = 0
+        self._autosave_duration = 7.0  # 7 seconds
+        
+        # Warning text
+        self._autosave_warning_text = [
+            "This game has an autosave feature.",
+            "Please do not power off the system or close the game",
+            "while this icon is visible"
+        ]
+        
+        # Loading animation setup
+        self._autosave_loading_frames = []
+        self._autosave_frame_index = 0
+        self._autosave_animation_timer = 0
+        self._autosave_animation_speed = 0.15  # Change frame every 0.15 seconds
+        
+        # Load loading animation sprites
+        for i in range(1, 5):  # Assuming files are named 1.png, 2.png, 3.png, 4.png
+            try:
+                frame_path = os.path.join("assets", "sprites", "loading screen", f"{i}.png")
+                frame = pygame.image.load(frame_path).convert_alpha()
+                self._autosave_loading_frames.append(frame)
+                print(f"Loaded autosave loading frame: {frame_path}")
+            except pygame.error as e:
+                print(f"Could not load autosave loading frame {frame_path}: {e}")
+        
+        # Create fallback frames if loading failed
+        if not self._autosave_loading_frames:
+            print("Creating fallback autosave loading animation")
+            for i in range(4):
+                # Create simple animated circles as fallback
+                fallback_frame = pygame.Surface((32, 32), pygame.SRCALPHA)
+                color_intensity = 100 + (i * 40)  # Varying brightness
+                radius = 12 - (i * 2)  # Varying size
+                pygame.draw.circle(fallback_frame, (color_intensity, color_intensity, color_intensity), 
+                                (16, 16), max(radius, 4))
+                self._autosave_loading_frames.append(fallback_frame)
+
+    def _update_autosave_warning(self, dt):
+        """Update autosave warning screen timer and animation"""
+        if self._state != 'autosave_warning':
+            return
+        
+        # Update timer
+        self._autosave_timer += dt
+        
+        # Update loading animation
+        self._autosave_animation_timer += dt
+        if self._autosave_animation_timer >= self._autosave_animation_speed:
+            self._autosave_animation_timer = 0
+            self._autosave_frame_index = (self._autosave_frame_index + 1) % len(self._autosave_loading_frames)
+        
+        # Auto-advance after 7 seconds
+        if self._autosave_timer >= self._autosave_duration:
+            self._finish_autosave_warning()
+
+    def _draw_autosave_warning(self):
+        """Draw the complete autosave warning splash screen"""
+        # Fill screen with black background
+        self._screen.fill((0, 0, 0))
+        
+        # Prepare text surfaces
+        text_surfaces = []
+        line_heights = []
+        
+        for i, line in enumerate(self._autosave_warning_text):
+            if i == 0:  # First line - title
+                font = self._menu_font if hasattr(self, '_menu_font') else pygame.font.Font(None, 48)
+                color = (255, 255, 100)  # Yellow for emphasis
+            else:  # Body text
+                font = self._small_font if hasattr(self, '_small_font') else pygame.font.Font(None, 32)
+                color = (255, 255, 255)  # White
+            
+            text_surface = font.render(line, True, color)
+            text_surfaces.append(text_surface)
+            line_heights.append(text_surface.get_height())
+        
+        # Calculate total text height and starting position
+        total_text_height = sum(line_heights) + (len(line_heights) - 1) * 15  # 15px spacing
+        text_start_y = (SCREEN_HEIGHT // 2) - (total_text_height // 2) - 60  # Offset for loading icon
+        
+        # Draw text with glow effects
+        current_y = text_start_y
+        for i, (text_surface, line_height) in enumerate(zip(text_surfaces, line_heights)):
+            # Center text horizontally
+            text_x = SCREEN_WIDTH // 2 - text_surface.get_width() // 2
+            
+            # Draw glow effect
+            glow_color = (80, 80, 40) if i == 0 else (60, 60, 60)  # Different glow for title
+            font = self._menu_font if (i == 0 and hasattr(self, '_menu_font')) else (self._small_font if hasattr(self, '_small_font') else pygame.font.Font(None, 32))
+            
+            for offset_x in [-2, -1, 0, 1, 2]:
+                for offset_y in [-2, -1, 0, 1, 2]:
+                    if offset_x == 0 and offset_y == 0:
+                        continue  # Skip center position
+                    glow_surface = font.render(self._autosave_warning_text[i], True, glow_color)
+                    self._screen.blit(glow_surface, (text_x + offset_x, current_y + offset_y))
+            
+            # Draw main text
+            self._screen.blit(text_surface, (text_x, current_y))
+            current_y += line_height + 15
+        
+        # Draw loading icon
+        if self._autosave_loading_frames:
+            # Get current frame
+            current_frame = self._autosave_loading_frames[self._autosave_frame_index]
+            
+            # Scale the frame for better visibility
+            scaled_size = (96, 72)
+            scaled_frame = pygame.transform.scale(current_frame, scaled_size)
+            
+            # Position below text
+            icon_x = SCREEN_WIDTH // 2 - scaled_frame.get_width() // 2
+            icon_y = current_y + 30  # 30px below text
+            
+            # Create glow effect for loading icon
+            glow_surface = pygame.Surface((scaled_size[0] + 30, scaled_size[1] + 30), pygame.SRCALPHA)
+            glow_center = (glow_surface.get_width() // 2, glow_surface.get_height() // 2)
+            
+            # Multiple glow layers for smooth effect
+            for layer in range(6):
+                alpha = max(0, 40 - (layer * 6))  # Decreasing alpha
+                radius = (scaled_size[0] // 2) + (layer * 4)  # Increasing radius
+                glow_color = (255, 255, 255, alpha)
+                # Draw glow circle
+                glow_temp = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+                pygame.draw.circle(glow_temp, glow_color, (radius, radius), radius)
+                glow_rect = glow_temp.get_rect(center=glow_center)
+                glow_surface.blit(glow_temp, glow_rect)
+            
+            # Draw glow
+            glow_x = icon_x - 15
+            glow_y = icon_y - 15
+            self._screen.blit(glow_surface, (glow_x, glow_y))
+            
+            # Draw the actual loading icon
+            self._screen.blit(scaled_frame, (icon_x, icon_y))
+        
+        # Draw "Press any key to continue" text at bottom
+        continue_font = pygame.font.Font(None, 28)
+        continue_text = ""
+        continue_surface = continue_font.render(continue_text, True, (180, 180, 180))
+        continue_x = SCREEN_WIDTH // 2 - continue_surface.get_width() // 2
+        continue_y = SCREEN_HEIGHT - 60
+        
+        # Add subtle glow to continue text
+        for offset in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
+            glow_continue = continue_font.render(continue_text, True, (50, 50, 50))
+            self._screen.blit(glow_continue, (continue_x + offset[0], continue_y + offset[1]))
+        
+        self._screen.blit(continue_surface, (continue_x, continue_y))
+
+    def _finish_autosave_warning(self):
+        """Finish autosave warning and transition to start screen"""
+        self._state = 'start_screen'
+        
+        # Initialize title position for start screen (center)
+        self._title_y_pos = SCREEN_HEIGHT // 2 - self._title_text.get_height() // 2
+        # Set target position for when we transition (top quarter)  
+        self._title_target_y = SCREEN_HEIGHT // 4 - self._title_text.get_height() // 2
+        
+        # Start playing the music in a loop
+        pygame.mixer_music.play(-1)  # -1 means loop indefinitely
+        
+        def render_start_screen():
+            self.update_background()
+            self.render_start_screen()
+        SceneManager.fade_from_black(self._screen, render_start_screen, self._fade_duration)
 
     def handle_intro_sequence(self, events):
-        """Handle the intro logo sequence"""
+        """Handle the complete intro sequence: logo -> autosave warning -> start screen"""
         if self._state == 'intro':
             def render_logo():
-                self._screen.fill((0, 0, 0)) # Fill with black first
+                self._screen.fill((0, 0, 0))  # Fill with black first
 
             if SceneManager.fade_in(self._screen, render_logo, self._logo_image, self._fade_duration, (0, 0, 0)):
-                pygame.time.delay(1000)  # show the logo for one second.
+                pygame.time.delay(1000)  # show the logo for one second
                 if SceneManager.fade_out(self._screen, render_logo, self._logo_image, self._fade_duration, (0, 0, 0)):
-                    self._state = 'start_screen'  # Go to start screen instead of main menu
-
-                    # Initialize title position for start screen (center)
-                    self._title_y_pos = SCREEN_HEIGHT // 2 - self._title_text.get_height() // 2
-                    # Set target position for when we transition (top quarter)
-                    self._title_target_y = SCREEN_HEIGHT // 4 - self._title_text.get_height() // 2
-
-                    # Start playing the music in a loop
-                    pygame.mixer_music.play(-1)  # -1 means loop indefinitely
-
-                    def render_start_screen():
-                        self.update_background()
-                        self.render_start_screen()
-                    SceneManager.fade_from_black(self._screen, render_start_screen, self._fade_duration)
+                    # Transition to autosave warning
+                    self._state = 'autosave_warning'
+                    self._autosave_timer = 0
+                    self._autosave_frame_index = 0
+                    self._autosave_animation_timer = 0
+                    
+        elif self._state == 'autosave_warning':
+            # Handle key presses to skip the warning
+            for event in events:
+                if event.type == pygame.KEYDOWN:
+                    self._finish_autosave_warning()
+                    return
+            
+            # Calculate delta time for updates
+            current_time = pygame.time.get_ticks() / 1000.0
+            if not hasattr(self, '_last_autosave_time'):
+                self._last_autosave_time = current_time
+            dt = current_time - self._last_autosave_time
+            self._last_autosave_time = current_time
+            
+            # Update and draw the autosave warning
+            self._update_autosave_warning(dt)
+            self._draw_autosave_warning()
 
     def handle_start_screen(self, events, dt):
         """Handle the start screen with flashing text"""
@@ -712,7 +904,11 @@ class Game:
 
     def _update_game_state(self, events, dt):
         """Update and render based on the current game state"""
-        if self._state == "intro":
+        if self._state == "autosave_warning":
+            self._update_autosave_warning(dt)
+            self._draw_autosave_warning()
+            return
+        elif self._state == "intro":
             self.handle_intro_sequence(events)
         elif self._state == "start_screen":
             self.update_background()  # Keep parallax working
@@ -785,7 +981,7 @@ class Game:
         elif level_index == 5:
             self._level = BossArena(tmx_map=levels[level_index], spawn=spawn_points[level_index])
         else:
-            self._level = PymunkLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index], level_index = level_index)
+            self._level = PymunkLevel(tmx_map=levels[level_index], spawn=spawn_points[level_index], level_index = level_index, gamesave=self._game_save)
 
         self._current_level_index = level_index  # Store current index.
 
@@ -1008,9 +1204,21 @@ class Game:
             self.load_level_images()
         
         # Initialize scroll and selection
-        self._scroll_offset = 0
-        self._target_scroll = 0
         self._selected_level = 0
+        
+        # Calculate level positions first
+        self._setup_level_grid()
+        
+        # Then properly center the first level
+        spacing = 180
+        self._target_scroll = -self._selected_level * spacing + SCREEN_WIDTH // 2
+        self._scroll_offset = self._target_scroll  # Set initial scroll immediately
+        
+        # Reset mouse interaction state
+        self._mouse_dragging = False
+        self._drag_start_pos = None
+        self._drag_velocity = 0
+        self._drag_history = []
         
         # Calculate level positions
         self._setup_level_grid()
@@ -1101,22 +1309,194 @@ class Game:
             self._level_positions.append((x, y))
             self._level_rects.append(pygame.Rect(x - base_size//2, y - base_size//2, base_size, base_size))
 
+    def _get_level_at_mouse_pos(self, mouse_pos):
+        """Get which level the mouse is hovering over, accounting for scroll offset"""
+        mouse_x, mouse_y = mouse_pos
+        
+        for i in range(6):
+            if i >= len(self._level_positions):
+                continue
+                
+            base_x, base_y = self._level_positions[i]
+            x = base_x + self._scroll_offset
+            
+            # Calculate size based on selection state
+            base_size = 140 if i == self._selected_level else 120
+            
+            # Create rect for this level
+            level_rect = pygame.Rect(x - base_size//2, base_y - base_size//2, base_size, base_size)
+            
+            if level_rect.collidepoint(mouse_x, mouse_y):
+                return i
+        
+        return None
+
+    def _update_drag_velocity(self, current_pos):
+        """Update drag velocity based on recent mouse movement"""
+        current_time = pygame.time.get_ticks()
+        
+        # Add current position to history
+        self._drag_history.append((current_pos[0], current_time))
+        
+        # Remove old history (keep only last 100ms)
+        self._drag_history = [(pos, time) for pos, time in self._drag_history 
+                             if current_time - time <= 100]
+        
+        # Calculate velocity based on recent movement
+        if len(self._drag_history) >= 2:
+            recent_pos, recent_time = self._drag_history[-1]
+            old_pos, old_time = self._drag_history[0]
+            
+            time_diff = recent_time - old_time
+            if time_diff > 0:
+                self._drag_velocity = (recent_pos - old_pos) / time_diff * 16  # Scale for 60fps
+
     def update_level_select(self, time_delta):
         """Update the level select screen"""
         if not self._level_select_open:
             return
+        
+        # Apply momentum/inertia when not actively dragging
+        if not self._mouse_dragging and abs(self._drag_velocity) > 0.1:
+            self._target_scroll += self._drag_velocity * time_delta * 60  # Scale for frame rate
+            self._drag_velocity *= self._momentum_decay
             
+            # Clamp scroll bounds
+            self._clamp_scroll_bounds()
+            
+            # If momentum is very low, snap to nearest level
+            if abs(self._drag_velocity) < 0.5:
+                self._snap_to_nearest_level()
+                self._drag_velocity = 0
+        
         # Smooth scrolling animation
         if abs(self._target_scroll - self._scroll_offset) > 1:
             self._scroll_offset += (self._target_scroll - self._scroll_offset) * 0.1
         else:
             self._scroll_offset = self._target_scroll
+        
+        # Update selected level based on what's closest to center
+        self._update_selected_level_from_scroll()
+
+    def _clamp_scroll_bounds(self):
+        """Ensure scroll doesn't go beyond reasonable bounds"""
+        # Calculate bounds based on level positions
+        spacing = 180
+        max_scroll = spacing * 2  # Allow scrolling a bit past first level
+        min_scroll = -spacing * 6  # Allow scrolling a bit past last level
+        
+        if self._target_scroll > max_scroll:
+            self._target_scroll = max_scroll
+            self._drag_velocity = 0
+        elif self._target_scroll < min_scroll:
+            self._target_scroll = min_scroll
+            self._drag_velocity = 0
+
+    def _update_selected_level_from_scroll(self):
+        """Update selected level based on current scroll position"""
+        # Find which level is closest to screen center
+        center_x = SCREEN_WIDTH // 2
+        closest_level = 0
+        closest_distance = float('inf')
+        
+        for i in range(6):
+            if i >= len(self._level_positions):
+                continue
+                
+            base_x, _ = self._level_positions[i]
+            level_x = base_x + self._scroll_offset
+            distance = abs(level_x - center_x)
+            
+            if distance < closest_distance:
+                closest_distance = distance
+                closest_level = i
+        
+        self._selected_level = closest_level
+
+    def _snap_to_nearest_level(self):
+        """Snap to the nearest level after dragging ends"""
+        spacing = 180
+        # Calculate which level should be centered
+        target_level = self._selected_level
+        self._target_scroll = -target_level * spacing + SCREEN_WIDTH // 2
 
     def handle_level_select_input(self, event):
         """Handle input for level select"""
         if not self._level_select_open:
             return False
+        
+        # Handle mouse events
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Left click
+                mouse_pos = pygame.mouse.get_pos()
+                
+                # Check if clicking on a level - but don't select immediately
+                clicked_level = self._get_level_at_mouse_pos(mouse_pos)
+                if clicked_level is not None:
+                    # Start potential drag
+                    self._drag_start_pos = mouse_pos
+                    self._drag_start_scroll = self._scroll_offset
+                    self._last_mouse_pos = mouse_pos
+                    self._drag_history = [(mouse_pos[0], pygame.time.get_ticks())]
+                    return True
+                        
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:  # Left click release
+                mouse_pos = pygame.mouse.get_pos()
+                
+                if self._mouse_dragging:
+                    # End dragging
+                    self._mouse_dragging = False
+                    self._drag_start_pos = None
+                    
+                    # If we were dragging with low velocity, snap to nearest level
+                    if abs(self._drag_velocity) < 2:
+                        self._snap_to_nearest_level()
+                        self._drag_velocity = 0
+                    return True
+                    
+                elif self._drag_start_pos is not None:
+                    # This was a click (not a drag) - check if we're still on the same level
+                    clicked_level = self._get_level_at_mouse_pos(mouse_pos)
+                    if clicked_level is not None:
+                        # If clicking on the currently selected level, select it
+                        if clicked_level == self._selected_level:
+                            self._select_current_level()
+                        else:
+                            # Move to clicked level
+                            self._selected_level = clicked_level
+                            spacing = 180
+                            self._target_scroll = -self._selected_level * spacing + SCREEN_WIDTH // 2
+                            self._drag_velocity = 0
+                    
+                    # Clean up drag state
+                    self._drag_start_pos = None
+                    return True
+                
+        elif event.type == pygame.MOUSEMOTION:
+            if self._drag_start_pos is not None:
+                mouse_pos = pygame.mouse.get_pos()
+                
+                # Check if we've moved enough to start dragging
+                drag_distance = abs(mouse_pos[0] - self._drag_start_pos[0])
+                
+                if not self._mouse_dragging and drag_distance > self._min_drag_distance:
+                    self._mouse_dragging = True
+                
+                if self._mouse_dragging:
+                    # Update scroll based on drag
+                    drag_offset = mouse_pos[0] - self._drag_start_pos[0]
+                    self._target_scroll = self._drag_start_scroll + drag_offset
+                    self._scroll_offset = self._target_scroll  # Immediate response while dragging
+                    
+                    # Update velocity for momentum
+                    self._update_drag_velocity(mouse_pos)
+                    
+                    # Clamp bounds
+                    self._clamp_scroll_bounds()
+                    return True
             
+        # Handle keyboard events
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_LEFT or event.key == pygame.K_a:
                 self._move_selection(-1)
@@ -1162,6 +1542,8 @@ class Game:
             # Update target scroll to center the selected level
             spacing = 180
             self._target_scroll = -self._selected_level * spacing + SCREEN_WIDTH // 2
+            # Stop any existing momentum
+            self._drag_velocity = 0
 
     def _select_current_level(self):
         """Select the currently highlighted level"""
@@ -1174,6 +1556,21 @@ class Game:
         # Close level select and start the selected level
         self.close_level_select()
         self.start_level(self._selected_level)
+
+    def close_level_select(self):
+        """Close the level select screen"""
+        self._level_select_open = False
+        self._mouse_dragging = False
+        self._drag_start_pos = None
+        self._drag_velocity = 0
+        
+        # Clean up UI
+        self._cleanup_level_select_ui()
+        
+        # Show main menu buttons again
+        if hasattr(self, '_main_menu_buttons'):
+            for button in self._main_menu_buttons:
+                button.show()
 
     def draw_level_select(self, screen):
         """Draw the level select grid as a full screen replacement"""
@@ -1233,12 +1630,23 @@ class Game:
             # Create rect for this level
             level_rect = pygame.Rect(x - base_size//2, base_y - base_size//2, base_size, base_size)
             
+            # Check if mouse is hovering over this level
+            mouse_pos = pygame.mouse.get_pos()
+            is_hovering = level_rect.collidepoint(mouse_pos) and not self._mouse_dragging
+            
             # Draw level background with border
             pygame.draw.rect(screen, (40, 40, 40), level_rect)  # Dark background
             
-            # Draw level border - selected gets special treatment
-            border_color = (255, 255, 0) if i == self._selected_level else (100, 100, 100)
-            border_width = 4 if i == self._selected_level else 2
+            # Draw level border - selected gets special treatment, hovered gets intermediate
+            if i == self._selected_level:
+                border_color = (255, 255, 0)
+                border_width = 4
+            elif is_hovering:
+                border_color = (200, 200, 0)
+                border_width = 3
+            else:
+                border_color = (100, 100, 100)
+                border_width = 2
             pygame.draw.rect(screen, border_color, level_rect, border_width)
             
             # Check if level is locked (only secret level can be locked)
@@ -1353,8 +1761,8 @@ class Game:
         # Draw navigation instructions with better styling
         if hasattr(self, '_small_font'):
             instructions = [
-                "A/D or LEFT/RIGHT to navigate",
-                "ENTER/SPACE to select"
+                "A/D or LEFT/RIGHT or drag with mouse to navigate",
+                "Enter, space or left click to select"
             ]
             
             y_offset = SCREEN_HEIGHT - 140

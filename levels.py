@@ -1,6 +1,6 @@
 import pygame, pytmx, os, random, math, time, threading
 from constants import *
-from utils import PhysicsManager, ParallaxBackground, DialogueSystem, LevelTimer, GameStats, ResultsScreen
+from utils import PhysicsManager, ParallaxBackground, DialogueSystem, LevelTimer, GameStats, ResultsScreen, GameSave
 from characters import PurePymunkBall, NPCCharacter, BlueBall, SignNPC, Cubodeez_The_Almighty_Cube as cb
 from utils import Camera, SpatialGrid
 from objects import RocketLauncher, Rocket, Credits, Explosion, Coin
@@ -23,7 +23,7 @@ spawn_points = [spawn1, spawn2, spawn3, spawn4, spawn5, spawn6]
 
 class PymunkLevel:
     """Level that uses spatial partitioning for efficient rendering"""
-    def __init__(self, spawn, tmx_map=None, play_music=True, level_index=0):
+    def __init__(self, spawn, tmx_map=None, play_music=True, level_index=0, gamesave=None):
         self._level_index = level_index  # Store the level index for music and stats
         x, y = spawn
         self._spawn_point = spawn
@@ -32,6 +32,7 @@ class PymunkLevel:
         self._ball = PurePymunkBall(self._physics, x, y)
         self._camera = Camera(2000, 2000)  # Default size, will be updated when map loads
         self._game_ref = None  # Reference to the game object, if needed
+        self._gamesave = gamesave
         # Initialize dialogue system
         self._setup_dialogue_system()
         
@@ -1271,6 +1272,27 @@ class PymunkLevel:
                 self._results_screen.show_results(self._stats, self._level_index)
                 self._showing_results = True
                 
+                # NEW: Save level progress and check for improvements
+                if hasattr(self, '_gamesave') and self._gamesave:
+                    improvements = self._gamesave.save_level_result(
+                        self._level_index, 
+                        self._stats, 
+                        self._results_screen
+                    )
+                    
+                    # Optional: Store improvements to show in UI later
+                    self._recent_improvements = improvements
+                    
+                    # Optional: Print improvements for debugging
+                    if improvements:
+                        print("🎉 NEW RECORDS:")
+                        for improvement in improvements:
+                            print(f"  - {improvement}")
+                    else:
+                        print("Level completed - no new records this time")
+                else:
+                    print("Warning: GameSave not available - progress not saved")
+                
                 # Pause the game physics/movement while showing results
                 if hasattr(self, '_space'):
                     # If using pymunk physics, you might want to pause the space
@@ -1279,7 +1301,7 @@ class PymunkLevel:
                 return True
 
         return False
-    
+
     def check_music_switch(self, track):
         """Check if player has reached a music switch tile"""
         if not self._music_switch_tiles or self._music_switched or self._music_switching:
@@ -2819,12 +2841,12 @@ class BossArena(SpaceLevel):
         screen.blit(overlay, (0, 0))
         
         # Draw victory text
-        victory_text = font.render("CUBE DEFEATED!", True, (200, 255, 200))
+        victory_text = font.render("ENEMY FELLED", True, (200, 255, 200))
         text_rect = victory_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
         screen.blit(victory_text, text_rect)
         
         # Draw subtitle
-        subtitle = font.render("YOU WIN", True, (255, 255, 255))
+        subtitle = font.render("You have defeated Cubodeez", True, (255, 255, 255))
         subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, text_rect.bottom + 40))
         screen.blit(subtitle, subtitle_rect)
     
@@ -2841,7 +2863,7 @@ class BossArena(SpaceLevel):
             text_alpha = min(255, int(self._game_over_fade_alpha * 1.5))
             
             # Draw game over text - main text centered
-            game_over_text = "CUBODEEZ HAS DEFEATED YOU"
+            game_over_text = "You have been terminated"
             text_surf = self._game_over_font.render(game_over_text, True, (255, 255, 255))
             
             # Ensure text isn't too wide for screen

@@ -1,4 +1,4 @@
-import pygame, os, pymunk, pygame_gui, random, math, time, threading, queue
+import pygame, os, pymunk, pygame_gui, random, math, time, threading, queue, json
 from constants import *
 
 pygame.init()
@@ -3003,3 +3003,122 @@ class ResultsScreen:
                 self.result_queue.get_nowait()
             except queue.Empty:
                 break
+
+class GameSave:
+    """Simple save system for game progress"""
+    def __init__(self, save_file="game_save.json"):
+        self.save_file = save_file
+        self.data = self.load_save()
+    
+    def load_save(self):
+        """Load save data from file, create new if doesn't exist"""
+        if os.path.exists(self.save_file):
+            try:
+                with open(self.save_file, 'r') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                print("Save file corrupted, creating new save")
+                return self.create_new_save()
+        else:
+            return self.create_new_save()
+    
+    def create_new_save(self):
+        """Create new save data structure"""
+        return {
+            "levels": {},  # Will store data for each level
+            "total_playtime": 0.0,
+            "version": "1.0"
+        }
+    
+    def save_level_result(self, level_index, stats, results_screen):
+        """Save the results for a specific level - only saves if there's an improvement"""
+        # Get the rank using the results screen's level-specific thresholds
+        rank = results_screen.get_level_rank(level_index)
+        score = stats.calculate_score()
+        time = stats.completion_time
+        
+        level_key = str(level_index)
+        
+        # Initialize level data if it doesn't exist
+        if level_key not in self.data["levels"]:
+            self.data["levels"][level_key] = {
+                "best_rank": "E",
+                "best_time": float('inf'),
+                "best_score": 0,
+                "attempts": 0,
+                "completed": False
+            }
+        
+        level_data = self.data["levels"][level_key]
+        level_data["attempts"] += 1
+        level_data["completed"] = True
+        
+        # Check for improvements
+        rank_values = {"S": 6, "A": 5, "B": 4, "C": 3, "D": 2, "E": 1}
+        improvements = []
+        save_needed = False
+        
+        # Check rank improvement
+        if rank_values[rank] > rank_values[level_data["best_rank"]]:
+            level_data["best_rank"] = rank
+            improvements.append(f"New best rank: {rank}")
+            save_needed = True
+        
+        # Check time improvement
+        if time < level_data["best_time"]:
+            level_data["best_time"] = time
+            improvements.append(f"New best time: {self.format_time(time)}")
+            save_needed = True
+        
+        # Check score improvement
+        if score > level_data["best_score"]:
+            level_data["best_score"] = score
+            improvements.append(f"New best score: {score}")
+            save_needed = True
+        
+        # Always update total playtime
+        self.data["total_playtime"] += time
+        
+        # Only save to file if there were improvements or first completion
+        if save_needed or level_data["attempts"] == 1:
+            self.save_to_file()
+            if improvements:
+                print(f"Level {level_index} - Improvements: {', '.join(improvements)}")
+            else:
+                print(f"Level {level_index} completed (first time)")
+        else:
+            print(f"Level {level_index} completed - no new records")
+        
+        return improvements  # Return list of improvements for UI feedback
+    
+    def get_level_best(self, level_index):
+        """Get best results for a specific level"""
+        level_key = str(level_index)
+        if level_key in self.data["levels"]:
+            return self.data["levels"][level_key]
+        return None
+    
+    def is_level_completed(self, level_index):
+        """Check if a level has been completed"""
+        level_data = self.get_level_best(level_index)
+        return level_data["completed"] if level_data else False
+    
+    def get_total_playtime(self):
+        """Get total time spent playing"""
+        return self.data["total_playtime"]
+    
+    def save_to_file(self):
+        """Save current data to file"""
+        try:
+            with open(self.save_file, 'w') as f:
+                json.dump(self.data, f, indent=2)
+        except IOError as e:
+            print(f"Failed to save game: {e}")
+    
+    def format_time(self, time_seconds):
+        """Format time as MM:SS.ss (same as your existing format)"""
+        if time_seconds == float('inf'):
+            return "--:--:--"
+        minutes = int(time_seconds // 60)
+        seconds = time_seconds % 60
+        return f"{minutes:02d}:{seconds:05.2f}"

@@ -1630,6 +1630,9 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         self._jump_duration = time_to_target
         self._descent_phase = False
         
+        # IMPORTANT: Immediately disable all collisions except player when jumping starts
+        self.disable_all_collisions_except_player()
+        
         # Audio feedback
         if self._jump_sound:
             self._jump_sound.play()
@@ -1699,7 +1702,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
                 self.handle_landing(x, y)
                 return  # Exit update to prevent further processing
         
-        # Player collision check
+        # Player collision check (always active)
         if self.check_player_squish():
             if hasattr(self._target, 'death') and not (hasattr(self._target, 'is_dead') and self._target.is_dead):
                 self._target.death()
@@ -1734,7 +1737,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         else:
             self._eye_color = (255, 255, 0)  # Yellow when grounded
         
-        # State machine - REMOVED _handle_landing_state completely
+        # State machine
         if self._state == "idle":
             self._handle_idle_state(current_time)
         elif self._state == "preparing":
@@ -1743,7 +1746,6 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
             self._handle_jumping_state()
         elif self._state == "recovering":
             self._handle_recovering_state(current_time)
-        # NO LANDING STATE - goes directly from jumping to recovering
         
         # Visual effects
         self.update_visual_effects()
@@ -1754,6 +1756,18 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         # Show and update target marker
         self._show_marker = True
         self._marker_locked = False
+        
+        # Ensure full collisions are enabled when idle and grounded
+        if self._grounded:
+            ground_category = self._physics.collision_types.get("ground", 1)
+            ball_category = self._physics.collision_types.get("ball", 1)
+            platform_category = self._physics.collision_types.get("platform", 2)  # Add platform collisions
+            
+            self._shape.filter = pymunk.ShapeFilter(
+                categories=0x1,
+                mask=ground_category | ball_category | platform_category
+            )
+            self._landing_collision_enabled = True
         
         # Check for state transition timing
         action_ready = current_time > self._next_action_time and self._grounded
@@ -1798,14 +1812,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
             self._jump_time = 0
             self._landing_collision_enabled = False
             
-            # Enable only player collision during jump startup
-            ball_category = self._physics.collision_types.get("ball", 1)
-            self._shape.filter = pymunk.ShapeFilter(
-                categories=0x1,
-                mask=ball_category
-            )
-            
-            # Execute jump
+            # Execute jump (collision disabling happens inside jump_to_target)
             if self.jump_to_target():
                 self._state = "jumping"
                 print(f"Jump started - target: ({self._target_x}, {self._target_y})")
@@ -1814,25 +1821,46 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
                 self._next_action_time = current_time + 0.5
 
     def _handle_jumping_state(self):
-        """Handle airborne state - simplified"""
-        # Enter descent when falling
-        if self._body.velocity.y > 0 and not self._descent_phase:
-            self._descent_phase = True
-            print("Entering descent phase")
+        """Handle airborne state - with proper collision management"""
+        # Ensure we're phasing through platforms during ascent
+        if not self._descent_phase:
+            # Keep only player collision during ascent
+            ball_category = self._physics.collision_types.get("ball", 1)
+            self._shape.filter = pymunk.ShapeFilter(
+                categories=0x1,
+                mask=ball_category
+            )
+            self._landing_collision_enabled = False
         
-        # Enable landing collision detection early and always during descent
-        if self._descent_phase and not self._landing_collision_enabled:
+        # Enter descent when falling and past peak of jump
+        if self._body.velocity.y > 50 and not self._descent_phase:  # Small threshold to avoid flickering
+            self._descent_phase = True
+            print("Entering descent phase - enabling ground collision")
+            
+            # Enable ground collision for landing (but NOT platform collision)
             ground_category = self._physics.collision_types.get("ground", 1)
             ball_category = self._physics.collision_types.get("ball", 1)
             self._shape.filter = pymunk.ShapeFilter(
                 categories=0x1,
-                mask=ground_category | ball_category
+                mask=ground_category | ball_category  # Only ground + player, no platforms
             )
             self._landing_collision_enabled = True
-            print("Landing collision enabled")
 
     def _handle_recovering_state(self, current_time):
         """Handle boss behavior during recovery/vulnerability state"""
+        # Ensure full collisions are re-enabled during recovery
+        if not self._landing_collision_enabled:
+            ground_category = self._physics.collision_types.get("ground", 1)
+            ball_category = self._physics.collision_types.get("ball", 1)
+            platform_category = self._physics.collision_types.get("platform", 2)
+            
+            self._shape.filter = pymunk.ShapeFilter(
+                categories=0x1,
+                mask=ground_category | ball_category | platform_category
+            )
+            self._landing_collision_enabled = True
+            print("Full collisions restored during recovery")
+        
         # Wait for recovery period to complete
         if current_time > self._next_action_time:
             self._state = "idle"
