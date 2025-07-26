@@ -188,7 +188,7 @@ class Rocket(GameObject):
     def _load_sound(self):
         """Load the rocket sound effect"""
         try:
-            self._rocket_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'rocket.mp3'))
+            self._rocket_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'rocket_sound.mp3'))
             self._rocket_sound.set_volume(0.4)
             self._rocket_sound.play()  # Loop the sound until explosion
         except:
@@ -331,7 +331,7 @@ class RocketLauncher(GameObject):
         # Load E prompt font and create text
         self._font = pygame.font.Font(None, 36)  # Default font if custom font fails
         try:
-            self._font = pygame.font.Font(os.path.join('assets', 'fonts', 'game_font.ttf'), 36)
+            self._font = pygame.font.Font(daFont, 18)
         except:
             print("Could not load custom font, using default")
         
@@ -342,7 +342,7 @@ class RocketLauncher(GameObject):
     def _load_sound(self):
         """Load the rocket launch sound"""
         try:
-            self._launch_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'rocket_launch.mp3'))
+            self._launch_sound = pygame.mixer.Sound(os.path.join('assets', 'sounds', 'rocket.mp3'))
             self._launch_sound.set_volume(0.5)
         except:
             self._launch_sound = None
@@ -353,7 +353,7 @@ class RocketLauncher(GameObject):
         self.body = pymunk.Body(body_type=pymunk.Body.STATIC)
         self.body.position = (self.x, self.y)
         self.shape = pymunk.Circle(self.body, 20)  # Adjust radius as needed
-        self.shape.collision_type = target.physics.collision_types["launcher"]
+        self.shape.collision_type = target.physics.collision_types["switch"]
         self.shape.launcher = self  # Reference to the launcher object
         target.physics.space.add(self.body, self.shape)
     

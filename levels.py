@@ -237,6 +237,7 @@ class PymunkLevel:
     def player_died(self):
         """Call this when player dies"""
         self._stats.deaths += 1
+        self._stats.rings_collected = 0
 
     def reach_checkpoint(self):
         """Call this when player reaches a checkpoint"""
@@ -753,7 +754,7 @@ class PymunkLevel:
         npc_count = len(self.NPCs) if hasattr(self, 'NPCs') else 0
         print(f"NPC and sign initialization complete. {npc_count} NPCs and signs created.")
 
-    def update(self, dt=0, level_index=0):
+    def update(self, dt=0, level_index=0, allow_respawn=True):
         """Update level state with NPCs and dialogue handling"""
         clock = pygame.time.Clock()
         if clock.get_fps() > 0:
@@ -822,7 +823,7 @@ class PymunkLevel:
                 self._ball.death()
 
             # Check for ball death and reset
-            if self._ball.is_dead:
+            if self._ball.is_dead and allow_respawn:
                 self.reset_ball()
         
         # Handle dialogue if active
@@ -1514,10 +1515,10 @@ class CaveLevel(PymunkLevel):
             self._parallax_bg.add_color_layer((30, 25, 40), 0.3)  # Dark purple-grey
             self._parallax_bg.add_color_layer((40, 30, 50), 0.5)  # Medium purple-grey
     
-    def update(self, dt=0, level_index=2):
+    def update(self, dt=0, level_index=2, allow_respawn=True):
         """Update level state including fog particles"""
         # Call the parent update method
-        super().update(dt, level_index=self._level_index)
+        super().update(dt, level_index=self._level_index, allow_respawn=allow_respawn)
     
     def draw(self, screen, level_index=2):
         """Draw level with fog effects"""
@@ -1704,10 +1705,10 @@ class SpaceLevel(PymunkLevel):
         # Add the starfield as a layer with minimal parallax
         self._parallax_bg.add_surface(bg_surface, 0.05)
     
-    def update(self, dt=0, level_index=4):
+    def update(self, dt=0, level_index=4, allow_respawn=True):
         """Update level state with space-specific behaviors"""
         # Call the parent update method first
-        super().update(dt, level_index=self._level_index)
+        super().update(dt, level_index=self._level_index, allow_respawn=allow_respawn)
     
     def draw(self, screen, level_index=0):
         """Draw the space level with the ball rendered behind everything else"""
@@ -1857,6 +1858,7 @@ class BossArena(SpaceLevel):
         self._boss_name_surf = None  # Cache boss name text
         self._cached_health_width = -1  # For health bar optimization
         self._player_defeat_sound = None
+        
         # Player death handling for game over screen
         self._setup_player_death_handling()
         
@@ -1865,13 +1867,13 @@ class BossArena(SpaceLevel):
         
         # Victory sequence after victory
         self._setup_victory_sequence()
-        
-        # Set up the original ball with custom death behavior
-        self._setup_ball_with_custom_death()
 
         # Initialize rocket launchers group
         self._rocket_launchers = pygame.sprite.Group()
         self._explosions = pygame.sprite.Group()
+        
+        # Game over flag - this will be set when player dies
+        self._game_over_triggered = False
         
         print("Boss arena initialized with space gravity and defeat mechanisms")
     
@@ -1949,14 +1951,13 @@ class BossArena(SpaceLevel):
     def _setup_player_death_handling(self):
         """Set up player death handling variables"""
         self._player_death_timer = 0
-        self._player_death_delay = 1.0  # Shorter delay before showing game over
-        self._player_is_dead = False
+        self._player_death_delay = 0  # Wait for death animation to complete 
         self._show_game_over = False
-        self._prevent_auto_respawn = True  # Prevent auto-respawn
         
-        # Update the auto-return delay to make it shorter
+        # Game over screen timing
         self._game_over_delay = 2.0  # 2 seconds before returning to menu
         self._game_over_timer = 0.0  # Timer to track the delay
+        self._game_over_music_played = False  # Track if game over music has been played
     
     def _setup_game_over_ui(self):
         """Set up the game over UI elements"""
@@ -1972,10 +1973,6 @@ class BossArena(SpaceLevel):
         self._game_over_fade_alpha = 0  # Start at 0 (transparent)
         self._game_over_fade_speed = 255  # Alpha units per second
         self._game_over_buttons_ready = False
-        
-        # NEW: Auto-return to menu after game over
-        self._game_over_delay = 2.0  # 2 seconds delay before returning to menu
-        self._game_over_timer = 0.0  # Timer to track the delay
         
         # Font for game over screen - adjusted size
         try:
@@ -1997,41 +1994,7 @@ class BossArena(SpaceLevel):
         self._fade_alpha = 0
         self._fading_to_black = False
         self._credits_duration = 65  # 1 minute and 5 seconds in seconds
-    
-    def _setup_ball_with_custom_death(self):
-        """Set up custom death handling for the player ball"""
-        # Store the original death method to call it later
-        if hasattr(self._ball, 'death'):
-            self._ball._original_death = self._ball.death
-            
-            # Create a reference to self that can be used in the method
-            boss_arena = self
-            
-            # Override the death method with our custom version
-            def custom_death_method():
-                # Call the original method
-                boss_arena._ball._original_death()
-                
-                # Now set our flags to show game over instead of respawning
-                boss_arena._prevent_auto_respawn = True
-                boss_arena._player_is_dead = True
-                boss_arena._game_over_fade_alpha = 0  # Start with transparent overlay
-                boss_arena._game_over_timer = 0.0  # Reset the auto-return timer
-                
-                # Play death sound if available
-                pygame.mixer_music.fadeout(200)
-                time.sleep(0.2)  # Wait for fadeout to complete
-                pygame.mixer_music.load(os.path.join("assets", "music", "game over.mp3"))
-                pygame.mixer_music.play()  
-
-                print("Player killed by Cubodeez - showing game over screen")
-                
-            # Replace the death method
-            self._ball.death = custom_death_method
-        
-        # Add a reference to this level in the ball
-        self._ball.level = self
-    
+       
     @property
     def boss(self):
         return self._boss
@@ -2075,35 +2038,31 @@ class BossArena(SpaceLevel):
                 layer_index = self._tmx_data.layers.index(layer)
                 
                 for x, y, gid in layer.tiles():
-                    try:
-                        # Try two different methods to get properties
-                        if isinstance(gid, pygame.Surface):
-                            # For direct image tiles, try using coordinates and layer index
-                            properties = self._tmx_data.get_tile_properties(x, y, layer_index) or {}
-                            print(f"Image tile at ({x}, {y}) properties: {properties}")
-                        else:
-                            # For tileset-based tiles, use GID
-                            properties = self._tmx_data.get_tile_properties_by_gid(gid) or {}
-                            print(f"Tileset tile at ({x}, {y}) properties: {properties}")
+                    # Try two different methods to get properties
+                    if isinstance(gid, pygame.Surface):
+                        # For direct image tiles, try using coordinates and layer index
+                        properties = self._tmx_data.get_tile_properties(x, y, layer_index) or {}
+                        print(f"Image tile at ({x}, {y}) properties: {properties}")
+                    else:
+                        # For tileset-based tiles, use GID
+                        properties = self._tmx_data.get_tile_properties_by_gid(gid) or {}
+                        print(f"Tileset tile at ({x}, {y}) properties: {properties}")
+                    
+                    # Check if this tile is marked as a rocket launcher
+                    if properties.get('Rocket', False):
+                        # Create rocket launcher logic
+                        world_x = x * self._TILE_SIZE
+                        world_y = y * self._TILE_SIZE
                         
-                        # Check if this tile is marked as a rocket launcher
-                        if properties.get('Rocket', False):
-                            # Create rocket launcher logic
-                            world_x = x * self._TILE_SIZE
-                            world_y = y * self._TILE_SIZE
-                            
-                            launcher = RocketLauncher(
-                                world_x + self._TILE_SIZE // 2,
-                                world_y + self._TILE_SIZE // 2,
-                                self._boss,
-                                explosion_group=self._explosions
-                            )
-                            self._rocket_launchers.add(launcher)
-                            rocket_count += 1
-                            print(f"Placed tile-based rocket launcher at ({world_x}, {world_y})")
-                            
-                    except Exception as e:
-                        print(f"Error processing rocket tile at ({x}, {y}): {e}")
+                        launcher = RocketLauncher(
+                            world_x + self._TILE_SIZE // 2,
+                            world_y + self._TILE_SIZE // 2,
+                            self._boss,
+                            explosion_group=self._explosions
+                        )
+                        self._rocket_launchers.add(launcher)
+                        rocket_count += 1
+                        print(f"Placed tile-based rocket launcher at ({world_x}, {world_y})")
         
         print(f"Found and placed {rocket_count} rocket launchers")
     
@@ -2347,12 +2306,12 @@ class BossArena(SpaceLevel):
         self._intro_sequence_active = True
         self._intro_fade_in = 0.0
         self._intro_text_scale = 1.0
-        self._player_is_dead = False
         self._show_game_over = False
-        self._prevent_auto_respawn = False
+        self._game_over_triggered = False
         self._game_over_fade_alpha = 0
         self._game_over_buttons_ready = False
         self._show_credits = False
+        self._game_over_music_played = False
 
         print("Level reset complete.")
     
@@ -2437,16 +2396,17 @@ class BossArena(SpaceLevel):
         return False
     
     def reset_ball(self):
-        """Reset the ball to the last checkpoint or spawn point"""
-        # Skip if auto-respawn is prevented
-        if self._prevent_auto_respawn and self._player_is_dead:
-            print("Auto-respawn prevented - showing game over screen instead")
-            # Start the timer for the game over screen
-            self._player_death_timer = 0
-            return False  # Indicate that we didn't reset
+        """Override reset_ball to handle game over sequence properly"""
+        # Check if the ball is dead and we haven't triggered game over yet
+        if not self._game_over_triggered:
+            print("Player died - triggering game over sequence")
+            self._game_over_triggered = True
+            self._player_death_timer = 0  # Reset the timer
+            return False  # Don't allow respawn
         
-        # Otherwise, proceed with normal reset
-        return super().reset_ball()
+        # If game over is already triggered, don't respawn
+        if self._game_over_triggered:
+            return False
     
     def update(self, dt=0):
         """Update boss arena state with improved ending sequence"""
@@ -2465,7 +2425,7 @@ class BossArena(SpaceLevel):
                     # Fade out music
                     pygame.mixer_music.fadeout(500)
                     # Set state to main menu
-                    self._game_ref.state = "main_menu"
+                    self._game_ref._state = "main_menu"
                     # Play menu music
                     try:
                         pygame.mixer_music.load(os.path.join("assets", "music", "theme.mp3"))
@@ -2514,9 +2474,9 @@ class BossArena(SpaceLevel):
             self._handle_intro_sequence(dt)
             return
         
-        # Game over screen handling
-        if self._player_is_dead:
-            self._handle_player_death(dt)
+        # Handle game over sequence if triggered
+        if self._game_over_triggered:
+            self._handle_game_over_sequence(dt)
             return
         
         # Victory sequence handling
@@ -2529,10 +2489,6 @@ class BossArena(SpaceLevel):
                 self._fading_to_black = True
             
             # Don't update gameplay during victory screen
-            return
-        
-        # Don't update gameplay if showing game over screen
-        if self._show_game_over:
             return
         
         # Handle camera shake
@@ -2574,12 +2530,24 @@ class BossArena(SpaceLevel):
             self.start_boss_fight()
         
         # Call parent update for basic physics
-        super().update(dt)
+        super().update(dt, allow_respawn=False)
     
-    def _handle_player_death(self, dt):
-        """Handle player death and game over screen"""
-        # Update death timer
+    def _handle_game_over_sequence(self, dt):
+        """Handle the game over sequence properly"""
+        # Update the death timer
         self._player_death_timer += dt
+        
+        # Play game over music once after the death animation completes
+        if (self._player_death_timer >= self._player_death_delay and 
+            not self._game_over_music_played):
+            self._game_over_music_played = True
+            pygame.mixer_music.fadeout(200)
+            try:
+                pygame.mixer_music.load(os.path.join("assets", "music", "game over.mp3"))
+                pygame.mixer_music.play()
+                print("Playing game over music")
+            except:
+                print("Could not load game over music")
         
         # Start showing game over screen after delay
         if self._player_death_timer >= self._player_death_delay:
@@ -2596,6 +2564,10 @@ class BossArena(SpaceLevel):
                 
             # Update the auto-return timer
             self._game_over_timer += dt
+        
+        # Continue updating the game world but don't allow respawn
+        # This ensures the death animation plays properly
+        super().update(dt, allow_respawn=False)
     
     def _update_gameplay(self, dt):
         """Update core gameplay elements"""
@@ -2611,7 +2583,7 @@ class BossArena(SpaceLevel):
         
         # Call parent update for normal gameplay (skip if transitioning)
         if not self._fading_to_black and not self._boss_defeated:
-            super().update(dt)
+            super().update(dt, allow_respawn=False)
         
         # Skip boss updates if not active
         if not self._boss_active or not self._boss:
@@ -2633,29 +2605,21 @@ class BossArena(SpaceLevel):
         if not self._boss or not self._boss_active or not self._ball:
             return
         
-        # First check for player squishing
-        if self._boss.check_player_squish():
-            # Kill the player if not already dead
-            if hasattr(self._ball, 'death') and not self._ball.is_dead:
-                print("Direct squish detection in update method!")
-                self._ball.death()
+        # Don't check collision if game over is already triggered
+        if self._game_over_triggered:
+            return
         
-        # Add direct collision check with player for better detection
-        if self._boss._jumping and self._boss.body.velocity.y > 200:
-            # Simple AABB collision check
-            boss_rect = self._boss.rect
-            player_rect = self._ball.rect
+        boss_rect = self._boss.rect
+        player_rect = self._ball.rect
+        
+        if boss_rect.colliderect(player_rect):
+            print("Direct collision detected between boss and player!")
             
-            if boss_rect.colliderect(player_rect):
-                # Direct collision detection
-                print("Direct collision detected between boss and player!")
-                
-                # Kill the player if not already dead
-                if hasattr(self._ball, 'death') and not self._ball.is_dead:
-                    print("Directly squishing player from collision check")
-                    self._ball.death()
-                    if self._boss._squish_sound:
-                        self._boss._squish_sound.play()
+            # Trigger death if ball isn't already dead or exploding
+            if hasattr(self._ball, 'death') and not self._ball.is_dead and not self._ball.is_exploding:
+                print("Player killed by boss")
+                self._ball.death()
+                self.reset_ball()
     
     def draw(self, screen):
         """Draw the boss arena with all elements"""
@@ -2729,7 +2693,7 @@ class BossArena(SpaceLevel):
         bar_width = 500
         bar_height = 30
         x = (SCREEN_WIDTH - bar_width) // 2
-        y = 20
+        y = 55
         
         # Health percentage
         health_percent = self._boss.health / 100
@@ -2844,11 +2808,6 @@ class BossArena(SpaceLevel):
         victory_text = font.render("ENEMY FELLED", True, (200, 255, 200))
         text_rect = victory_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
         screen.blit(victory_text, text_rect)
-        
-        # Draw subtitle
-        subtitle = font.render("You have defeated Cubodeez", True, (255, 255, 255))
-        subtitle_rect = subtitle.get_rect(center=(SCREEN_WIDTH // 2, text_rect.bottom + 40))
-        screen.blit(subtitle, subtitle_rect)
     
     def _draw_game_over_screen(self, screen):
         """Draw game over screen when the player is defeated by Cubodeez"""
@@ -2955,37 +2914,6 @@ class BossArena(SpaceLevel):
         # If not in game over, let parent handle events
         handled = super().handle_events(event)
         return handled
-    
-    def _check_boss_player_collision(self):
-        """Check for direct collision between boss and player"""
-        if not self._boss or not self._boss_active or not self._ball:
-            return
-        
-        # First check for player squishing
-        if self._boss.check_player_squish():
-            # Kill the player if not already dead
-            if hasattr(self._ball, 'death') and not self._ball.is_dead:
-                print("Direct squish detection in update method!")
-                self._ball.death()
-                if self._boss._squish_sound:
-                    self._boss._squish_sound.play()
-        
-        # Add direct collision check with player for better detection
-        if self._boss._jumping and self._boss.body.velocity.y > 200:
-            # Simple AABB collision check
-            boss_rect = self._boss.rect
-            player_rect = self._ball.rect
-            
-            if boss_rect.colliderect(player_rect):
-                # Direct collision detection
-                print("Direct collision detected between boss and player!")
-                
-                # Kill the player if not already dead
-                if hasattr(self._ball, 'death') and not self._ball.is_dead:
-                    print("Directly squishing player from collision check")
-                    self._ball.death()
-                    if self._boss._squish_sound:
-                        self._boss._squish_sound.play()
 
     def _handle_game_over_events(self, event):
         """Handle events for the game over screen"""

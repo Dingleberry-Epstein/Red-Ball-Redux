@@ -2448,7 +2448,7 @@ class GameStats:
     def calculate_score(self):
         """Calculate total score based on stats"""
         base_score = 1000
-        time_bonus = max(0, 300 - int(self.completion_time))  # Bonus for fast completion
+        time_bonus = 300 - int(self.completion_time)  # Bonus for fast completion
         ring_bonus = self.rings_collected * 10
         enemy_bonus = self.enemies_defeated * 50
         secret_bonus = self.secrets_found * 200
@@ -2520,6 +2520,14 @@ class ResultsScreen:
         self.rank_glow_intensity = 0
         self.sparkle_particles = []
         self.rank_revealed = False
+        
+        # Rank-specific animation states
+        self.rank_animation_progress = 0
+        self.rank_fragments = []  # For E rank crumbling effect
+        self.rank_wobble_offset = 0  # For D rank boring wobble
+        self.rank_fade_alpha = 255  # For general rank fade effects
+        self.e_rank_tilt = 0  # For E rank lopsided effect
+        self.crack_lines = []  # For E rank crack lines
         
         # Sequential stat animation with "New Best!" support
         self.stat_display_delay = 0.5
@@ -2612,6 +2620,14 @@ class ResultsScreen:
         self.current_stat_index = 0
         self.stat_start_time = None
         self.rank_revealed = False
+        
+        # Reset rank-specific animation states
+        self.rank_animation_progress = 0
+        self.rank_fragments = []
+        self.rank_wobble_offset = 0
+        self.rank_fade_alpha = 255
+        self.e_rank_tilt = 0
+        self.crack_lines = []
         
         # Reset thread flags
         self.color_caching_complete = False
@@ -2768,6 +2784,39 @@ class ResultsScreen:
         
         self.rank_music_started = True
     
+    def initialize_e_rank_cracks(self):
+        """Initialize crack lines for E rank cracking effect"""
+        import random
+        self.crack_lines = []
+        
+        # Create several crack lines that will appear over the text
+        crack_count = 5
+        center_x = self.screen_width // 2
+        center_y = 480
+        
+        for i in range(crack_count):
+            # Create cracks that span across the rank text area
+            start_x = center_x + random.randint(-80, 80)
+            start_y = center_y + random.randint(-25, 25)
+            
+            # Cracks should be jagged lines
+            points = [(start_x, start_y)]
+            current_x, current_y = start_x, start_y
+            
+            # Create 3-5 segments for each crack
+            segments = random.randint(3, 5)
+            for segment in range(segments):
+                current_x += random.randint(-20, 20)
+                current_y += random.randint(-15, 15)
+                points.append((current_x, current_y))
+            
+            crack = {
+                'points': points,
+                'alpha': 0,
+                'width': random.randint(1, 3)
+            }
+            self.crack_lines.append(crack)
+    
     def update(self, dt):
         """Update animations"""
         if not self.results_shown:
@@ -2800,16 +2849,53 @@ class ResultsScreen:
             
         self.update_sequential_stats(elapsed)
             
-        # Enhanced rank animation
+        # Enhanced rank animation with rank-specific behaviors
         if self.victory_music_finished:
             rank_start_time = self.victory_music_duration
             rank_elapsed = elapsed - rank_start_time
             
-            if rank_elapsed >= 0 and rank_elapsed < 2.0:  # Extended rank animation
+            if rank_elapsed >= 0:
                 self.rank_revealed = True
+                current_rank = self.get_level_rank()
+                
+                # Update rank-specific animations
+                self.update_rank_animation(rank_elapsed, current_rank, dt)
+                    
+                if not self.rank_music_started:
+                    self.start_rank_music(current_rank)
+            
+            # Enhanced sparkle system for S rank (unchanged)
+            if (self.stats and self.get_level_rank() == "S" and 
+                rank_elapsed > 1.0 and len(self.sparkle_particles) < 30):
+                if rank_elapsed % 0.1 < dt:
+                    self.add_sparkle()
+                
+        # Update sparkle particles
+        for particle in self.sparkle_particles[:]:
+            particle["life"] -= dt
+            particle["y"] -= particle["speed"] * dt
+            particle["x"] += math.sin(particle["y"] * 0.01) * 2
+            particle["alpha"] = max(0, int(255 * (particle["life"] / particle["max_life"])))
+            if particle["life"] <= 0:
+                self.sparkle_particles.remove(particle)
+                
+                # Update E rank fragments
+        for fragment in self.rank_fragments:
+            fragment['x'] += fragment['vx'] * dt
+            fragment['y'] += fragment['vy'] * dt
+            fragment['vy'] += fragment['gravity'] * dt  # Apply gravity
+            fragment['rotation'] += fragment['rotation_speed']
+            fragment['alpha'] = max(0, fragment['alpha'] - fragment['fade_speed'])
+    
+    def update_rank_animation(self, rank_elapsed, rank, dt):
+        """Update rank-specific animations"""
+        self.rank_animation_progress = min(rank_elapsed / 2.0, 1.0)
+        
+        if rank in ["S", "A", "B"]:
+            # Keep existing animations for S, A, B ranks
+            if rank_elapsed < 2.0:
                 progress = min(rank_elapsed / 2.0, 1.0)
                 
-                # Multi-stage rank animation
                 if progress < 0.3:
                     # Initial bounce
                     bounce_progress = progress / 0.3
@@ -2824,30 +2910,85 @@ class ResultsScreen:
                     self.rank_scale = 1.0 + 0.1 * math.sin(glow_progress * math.pi * 8)
                     self.rank_glow_intensity = math.sin(glow_progress * math.pi * 4) * 0.5 + 0.5
                     
-                if not self.rank_music_started:
-                    self.start_rank_music(self.get_level_rank())
-                    
-            elif rank_elapsed >= 2.0:
+            else:
                 self.rank_scale = 1.0
-                self.rank_glow_intensity = 0.3 + 0.2 * math.sin(elapsed * 3)  # Gentle pulse
+                self.rank_glow_intensity = 0.3 + 0.2 * math.sin(rank_elapsed * 3)
                 
-                if not self.rank_music_started:
-                    self.start_rank_music(self.get_level_rank())
-            
-            # Enhanced sparkle system for S rank
-            if (self.stats and self.get_level_rank() == "S" and 
-                rank_elapsed > 1.0 and len(self.sparkle_particles) < 30):
-                if rank_elapsed % 0.1 < dt:  # Add sparkles more frequently
-                    self.add_sparkle()
+        elif rank == "C":
+            # Standard "you passed" animation - simple fade-in with mild satisfaction
+            if rank_elapsed < 1.5:
+                progress = rank_elapsed / 1.5
+                self.rank_scale = 0.8 + 0.2 * progress  # Modest growth
+                self.rank_fade_alpha = int(255 * progress)
+            else:
+                self.rank_scale = 1.0
+                self.rank_fade_alpha = 255
+                # Very subtle pulse to show "okay, you did it"
+                self.rank_glow_intensity = 0.1 + 0.1 * math.sin(rank_elapsed * 2)
                 
-        # Update sparkle particles
-        for particle in self.sparkle_particles[:]:
-            particle["life"] -= dt
-            particle["y"] -= particle["speed"] * dt
-            particle["x"] += math.sin(particle["y"] * 0.01) * 2
-            particle["alpha"] = max(0, int(255 * (particle["life"] / particle["max_life"])))
-            if particle["life"] <= 0:
-                self.sparkle_particles.remove(particle)
+        elif rank == "D":
+            # Boring "could have done better" - underwhelming wobble
+            if rank_elapsed < 2.0:
+                progress = rank_elapsed / 2.0
+                self.rank_scale = 0.9 + 0.1 * progress  # Smaller, less impressive growth
+                self.rank_fade_alpha = int(255 * progress)
+                
+                # Disappointing wobble effect
+                self.rank_wobble_offset = math.sin(rank_elapsed * 8) * 3 * (1 - progress)
+            else:
+                self.rank_scale = 1.0
+                self.rank_fade_alpha = 200  # Slightly dimmed
+                # Boring, slow wobble that suggests disappointment
+                self.rank_wobble_offset = math.sin(rank_elapsed * 1.5) * 2
+                
+        elif rank == "E":
+            # Cracked and lopsided failure animation
+            if rank_elapsed < 1.0:
+                # Initial normal appearance
+                progress = rank_elapsed / 1.0
+                self.rank_scale = progress
+                self.rank_fade_alpha = int(255 * progress)
+            elif rank_elapsed < 1.5:
+                # Brief moment of stability
+                self.rank_scale = 1.0
+                self.rank_fade_alpha = 255
+            elif rank_elapsed < 2.5:
+                # Start cracking and tilting
+                crack_progress = (rank_elapsed - 1.5) / 1.0
+                
+                # Initialize cracks if not done
+                if not self.crack_lines:
+                    self.initialize_e_rank_cracks()
+                
+                # Violent shaking gets more intense
+                shake_intensity = 8 * crack_progress
+                self.rank_wobble_offset = math.sin(rank_elapsed * 30) * shake_intensity
+                
+                # E starts to tilt/fall over
+                self.e_rank_tilt = crack_progress * 15  # Gradually tilt 15 degrees
+                
+                # Cracks become more visible
+                for crack in self.crack_lines:
+                    crack['alpha'] = min(255, int(200 * crack_progress))
+                
+                # Slight dimming as it gets damaged
+                self.rank_fade_alpha = int(255 * (1 - crack_progress * 0.3))
+            else:
+                # Settled in broken state - still visible but clearly damaged
+                final_progress = min((rank_elapsed - 2.5) / 1.0, 1.0)
+                
+                # Less violent shaking, more like unstable settling
+                self.rank_wobble_offset = math.sin(rank_elapsed * 4) * 3
+                
+                # E is noticeably lopsided
+                self.e_rank_tilt = 15 + math.sin(rank_elapsed * 2) * 3  # Slight wobble in tilt
+                
+                # Cracks are fully visible
+                for crack in self.crack_lines:
+                    crack['alpha'] = 200
+                
+                # Dimmed but still readable
+                self.rank_fade_alpha = 180
     
     def update_sequential_stats(self, elapsed):
         """Update sequential stat display with 'New Best!' indicators"""
@@ -3091,7 +3232,7 @@ class ResultsScreen:
         # Enhanced sequential stats
         self.draw_sequential_stats(screen)
             
-        # Enhanced rank display
+        # Enhanced rank display with rank-specific animations
         if self.rank_revealed and self.rank_scale > 0:
             self.draw_enhanced_rank(screen)
 
@@ -3201,7 +3342,7 @@ class ResultsScreen:
                     screen.blit(best_surf, best_rect)
     
     def draw_enhanced_rank(self, screen):
-        """Draw rank with enhanced visual effects"""
+        """Draw rank with enhanced visual effects and rank-specific animations"""
         rank = self.get_level_rank()
         rank_color = self.rank_colors.get(rank, (255, 255, 255))
         
@@ -3211,32 +3352,129 @@ class ResultsScreen:
         try:
             rank_font = pygame.font.Font(daFont, scaled_size)
             rank_text = f"RANK: {rank}"
+            
+            # Apply rank-specific modifications to color and alpha
+            if rank == "D":
+                # Slightly dimmed for disappointing performance
+                rank_color = tuple(int(c * 0.8) for c in rank_color)
+            elif rank == "E":
+                # Use fade alpha for crumbling effect
+                rank_color = tuple(int(c * (self.rank_fade_alpha / 255.0)) for c in rank_color)
+            
             rank_surf = rank_font.render(rank_text, True, rank_color)
+            rank_surf.set_alpha(self.rank_fade_alpha)
             
-            center_pos = (self.screen_width // 2, 480)
+            # Calculate center position with wobble offset for D and E ranks
+            center_x = self.screen_width // 2 + self.rank_wobble_offset
+            center_y = 480
+            center_pos = (center_x, center_y)
             
-            # Multi-layer glow effect based on rank
-            glow_layers = 3 if rank in ["S", "A"] else 1
-            for layer in range(glow_layers):
-                glow_intensity = int((self.rank_glow_intensity * 150) / (layer + 1))
-                if glow_intensity > 0:
-                    glow_surf = rank_font.render(rank_text, True, (255, 255, 255))
+            # Rank-specific visual effects
+            if rank in ["S", "A", "B"]:
+                # Keep existing multi-layer glow effect for high ranks
+                glow_layers = 3 if rank in ["S", "A"] else 1
+                for layer in range(glow_layers):
+                    glow_intensity = int((self.rank_glow_intensity * 150) / (layer + 1))
+                    if glow_intensity > 0:
+                        glow_surf = rank_font.render(rank_text, True, (255, 255, 255))
+                        glow_surf.set_alpha(glow_intensity)
+                        
+                        offset = (layer + 1) * 2
+                        for glow_offset in [(offset, offset), (-offset, -offset), 
+                                          (offset, -offset), (-offset, offset)]:
+                            glow_rect = rank_surf.get_rect(center=(center_pos[0] + glow_offset[0], 
+                                                                 center_pos[1] + glow_offset[1]))
+                            screen.blit(glow_surf, glow_rect)
+            
+            elif rank == "C":
+                # Subtle, modest glow for C rank - "you passed"
+                if self.rank_glow_intensity > 0:
+                    glow_intensity = int(self.rank_glow_intensity * 80)  # Much more subtle
+                    glow_surf = rank_font.render(rank_text, True, (150, 150, 200))  # Cooler tone
                     glow_surf.set_alpha(glow_intensity)
                     
-                    offset = (layer + 1) * 2
-                    for glow_offset in [(offset, offset), (-offset, -offset), 
-                                      (offset, -offset), (-offset, offset)]:
+                    for glow_offset in [(1, 1), (-1, -1), (1, -1), (-1, 1)]:
                         glow_rect = rank_surf.get_rect(center=(center_pos[0] + glow_offset[0], 
                                                              center_pos[1] + glow_offset[1]))
                         screen.blit(glow_surf, glow_rect)
             
-            # Draw main rank text
-            rank_rect = rank_surf.get_rect(center=center_pos)
-            screen.blit(rank_surf, rank_rect)
+            elif rank == "D":
+                # No glow effect - boring and disappointing
+                # The wobble and dimmed color are the only effects
+                pass
             
-            # Add rank-specific visual effects
+            elif rank == "E":
+                # Draw cracked and lopsided E rank
+                # Split into "RANK: " and "E" parts for different effects
+                
+                # Draw "RANK: " part normally (just wobbles with shaking)
+                rank_part_text = "RANK: "
+                rank_part_surf = rank_font.render(rank_part_text, True, rank_color)
+                rank_part_surf.set_alpha(self.rank_fade_alpha)
+                
+                # Calculate position for "RANK: " part
+                rank_part_rect = rank_part_surf.get_rect()
+                rank_part_x = center_x - 50  # Shift left a bit
+                rank_part_pos = (rank_part_x, center_y)
+                
+                # Draw "E" part with tilt
+                e_text = "E"
+                e_surf = rank_font.render(e_text, True, rank_color)
+                e_surf.set_alpha(self.rank_fade_alpha)
+                
+                # Apply rotation to the E
+                if self.e_rank_tilt != 0:
+                    e_surf = pygame.transform.rotate(e_surf, self.e_rank_tilt)
+                
+                # Position the E after "RANK: "
+                e_rect = e_surf.get_rect()
+                e_x = rank_part_x + (rank_part_rect.width//1.5)
+                e_y = center_y + math.sin(pygame.time.get_ticks() * 0.01) * 2  # Slight independent wobble
+                e_pos = (e_x, e_y)
+                
+                # Draw both parts
+                screen.blit(rank_part_surf, rank_part_rect.move(rank_part_pos[0] - rank_part_rect.centerx, 
+                                                               rank_part_pos[1] - rank_part_rect.centery))
+                screen.blit(e_surf, e_rect.move(e_pos[0] - e_rect.centerx, 
+                                               e_pos[1] - e_rect.centery))
+                
+                # Draw crack lines over everything
+                if self.crack_lines:
+                    for crack in self.crack_lines:
+                        if crack['alpha'] > 0 and len(crack['points']) > 1:
+                            # Draw the crack as connected line segments
+                            for i in range(len(crack['points']) - 1):
+                                start_point = crack['points'][i]
+                                end_point = crack['points'][i + 1]
+                                
+                                # Create a surface for the crack line with alpha
+                                crack_surf = pygame.Surface((abs(end_point[0] - start_point[0]) + 10, 
+                                                           abs(end_point[1] - start_point[1]) + 10), pygame.SRCALPHA)
+                                
+                                # Calculate relative positions on the crack surface
+                                rel_start = (5, 5) if start_point[0] <= end_point[0] else (crack_surf.get_width() - 5, 5)
+                                rel_end = (crack_surf.get_width() - 5, crack_surf.get_height() - 5) if start_point[0] <= end_point[0] else (5, crack_surf.get_height() - 5)
+                                
+                                # Draw crack line
+                                pygame.draw.line(crack_surf, (80, 80, 80, crack['alpha']), 
+                                               rel_start, rel_end, crack['width'])
+                                
+                                # Blit the crack
+                                crack_rect = crack_surf.get_rect()
+                                crack_rect.center = ((start_point[0] + end_point[0]) // 2, 
+                                                   (start_point[1] + end_point[1]) // 2)
+                                screen.blit(crack_surf, crack_rect)
+                
+                return  # Skip the normal rank drawing for E rank
+            
+            # Draw main rank text (unless it's E rank which has custom rendering)
+            if rank != "E":
+                rank_rect = rank_surf.get_rect(center=center_pos)
+                screen.blit(rank_surf, rank_rect)
+            
+            # Additional rank-specific decorative effects
             if rank == "S":
-                # Golden particle ring around S rank
+                # Golden particle ring around S rank (unchanged)
                 particle_count = 8
                 ring_radius = 100
                 current_time = pygame.time.get_ticks() / 1000.0
@@ -3252,7 +3490,7 @@ class ResultsScreen:
                     screen.blit(particle_surf, (int(particle_x - 4), int(particle_y - 4)))
             
             elif rank in ["A", "B"]:
-                # Pulsing border for A/B ranks
+                # Pulsing border for A/B ranks (unchanged)
                 border_alpha = int(100 + 50 * math.sin(pygame.time.get_ticks() * 0.005))
                 border_color = (*rank_color, border_alpha)
                 border_rect = pygame.Rect(rank_rect.x - 20, rank_rect.y - 10, 
@@ -3261,6 +3499,20 @@ class ResultsScreen:
                 border_surf = pygame.Surface((border_rect.width, border_rect.height), pygame.SRCALPHA)
                 pygame.draw.rect(border_surf, border_color, border_surf.get_rect(), 3)
                 screen.blit(border_surf, border_rect)
+            
+            elif rank == "C":
+                # Simple, unexciting border that appears occasionally
+                if self.rank_glow_intensity > 0.05:  # Only when there's some glow
+                    border_alpha = int(60 + 20 * math.sin(pygame.time.get_ticks() * 0.003))
+                    border_color = (100, 100, 150, border_alpha)
+                    border_rect = pygame.Rect(rank_rect.x - 10, rank_rect.y - 5, 
+                                            rank_rect.width + 20, rank_rect.height + 10)
+                    
+                    border_surf = pygame.Surface((border_rect.width, border_rect.height), pygame.SRCALPHA)
+                    pygame.draw.rect(border_surf, border_color, border_surf.get_rect(), 1)
+                    screen.blit(border_surf, border_rect)
+            
+            # D and E ranks get no special decorative effects
                 
         except Exception as e:
             # Fallback rendering

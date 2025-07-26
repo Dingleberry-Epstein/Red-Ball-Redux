@@ -576,8 +576,10 @@ class Game:
             self._autosave_animation_timer = 0
             self._autosave_frame_index = (self._autosave_frame_index + 1) % len(self._autosave_loading_frames)
         
+        keys = pygame.key.get_pressed()
+        
         # Auto-advance after 7 seconds
-        if self._autosave_timer >= self._autosave_duration:
+        if self._autosave_timer >= self._autosave_duration or keys[pygame.K_RETURN] or keys[pygame.K_SPACE]:
             self._finish_autosave_warning()
 
     def _draw_autosave_warning(self):
@@ -1077,11 +1079,6 @@ class Game:
             
             # Draw map with all the necessary information
             self._map_system.draw(self._screen, player_x, player_y, level_width, level_height)
-
-        # FPS Display
-        fps_counter = self.clock.get_fps()
-        fps_display = pygame.font.Font(daFont, 12).render(f"FPS: {int(fps_counter)}", True, (255, 255, 255))
-        self.screen.blit(fps_display, (SCREEN_WIDTH - 100, 580))
 
     def _draw_level_complete_overlay(self):
         """Draw the level complete overlay with message"""
