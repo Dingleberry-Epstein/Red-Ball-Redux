@@ -34,3 +34,4 @@ Good luck dear player, you're gonna need it!
 - PyTMX
 - Pymunk
 - Pygame_GUI
+- Cryptography
