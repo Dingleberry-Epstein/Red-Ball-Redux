@@ -1027,7 +1027,7 @@ class Game:
             if self._current_level_index == 4:
                 self._boss_level_unlocked = True
                 print("BOSS LEVEL UNLOCKED by completing level 5!")
-            
+                
             def render_game():
                 self.render()
             

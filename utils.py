@@ -329,7 +329,7 @@ class SceneManager:
         return True
 
 class PhysicsManager:
-    """Physics manager with improved collision detection for switches"""
+    """Physics manager with improved collision detection for switches and squares"""
 
     def __init__(self):
         # Create the Pymunk space
@@ -340,7 +340,8 @@ class PhysicsManager:
         self._collision_types = {
             "ball": 1,
             "ground": 2,
-            "switch": 3
+            "switch": 3,
+            "square": 4
         }
 
         # Ground detection - we'll use a separate collision handler for this
@@ -365,6 +366,15 @@ class PhysicsManager:
             self._collision_types["switch"],
             begin=self._on_switch_begin,
             separate=self._on_switch_separate
+        )
+        
+        # Set up collision handler for squares using new Pymunk 7.1 API
+        self._space.on_collision(
+            self._collision_types["ball"], 
+            self._collision_types["square"],
+            begin=self._on_square_begin,
+            separate=self._on_square_separate,
+            pre_solve=self._on_square_pre_solve
         )
 
     @property
@@ -426,11 +436,29 @@ class PhysicsManager:
         
     def _on_switch_begin(self, arbiter, space, data):
         """Handle collision with switch - no physical collision effect"""
+        # Prevent physical collision by setting process_collision to False
+        arbiter.process_collision = False
         # No return value needed in Pymunk 7.1
-        pass
         
     def _on_switch_separate(self, arbiter, space, data):
         """Handle separation from switch"""
+        # No return value needed in Pymunk 7.1
+        pass
+        
+    def _on_square_begin(self, arbiter, space, data):
+        """Handle collision with square - normal physical collision"""
+        # Allow normal collision processing (this is the default)
+        # arbiter.process_collision = True  # This is the default, so we don't need to set it
+        # No return value needed in Pymunk 7.1
+        
+    def _on_square_pre_solve(self, arbiter, space, data):
+        """Handle pre-solve for square collision"""
+        # This can be used for custom collision response if needed
+        # No return value needed in Pymunk 7.1
+        pass
+        
+    def _on_square_separate(self, arbiter, space, data):
+        """Handle separation from square"""
         # No return value needed in Pymunk 7.1
         pass
 
@@ -457,16 +485,19 @@ class PhysicsManager:
         shape.elasticity = 0.0
         shape.friction = friction
         
-        # Set collision type - use ground by default or specified type
+        # Set collision type based on parameter
         if collision_type == "switch":
             shape.collision_type = self._collision_types["switch"]
+        elif collision_type == "square":
+            shape.collision_type = self._collision_types["square"]
         else:
+            # Default to ground
             shape.collision_type = self._collision_types["ground"]
 
         self._space.add(body, shape)
         return body, shape
 
-    def create_poly(self, vertices, friction=0.9):
+    def create_poly(self, vertices, friction=0.9, collision_type="ground"):
         """Create a static polygon with high friction"""
         if len(vertices) < 3:
             print(f"Error: Cannot create polygon with less than 3 vertices")
@@ -485,18 +516,28 @@ class PhysicsManager:
         shape = pymunk.Poly(body, local_verts)
         shape.elasticity = 0.0
         shape.friction = friction
-        shape.collision_type = self._collision_types["ground"]
+        
+        # Set collision type based on parameter
+        if collision_type in self._collision_types:
+            shape.collision_type = self._collision_types[collision_type]
+        else:
+            shape.collision_type = self._collision_types["ground"]
 
         self._space.add(body, shape)
         return body, shape
 
-    def create_segment(self, p1, p2, thickness=1, friction=0.9):
+    def create_segment(self, p1, p2, thickness=1, friction=0.9, collision_type="ground"):
         """Create a static line segment with high friction"""
         body = pymunk.Body(body_type=pymunk.Body.STATIC)
         shape = pymunk.Segment(body, p1, p2, thickness)
         shape.elasticity = 0.0
         shape.friction = friction
-        shape.collision_type = self._collision_types["ground"]
+        
+        # Set collision type based on parameter
+        if collision_type in self._collision_types:
+            shape.collision_type = self._collision_types[collision_type]
+        else:
+            shape.collision_type = self._collision_types["ground"]
 
         self._space.add(body, shape)
         return body, shape
@@ -2475,7 +2516,7 @@ class GameStats:
             return "E"
 
 class ResultsScreen:
-    """Debug version with extensive logging to identify New Best! issues"""
+    """Enhanced results screen with New Best! effects for all improved stats"""
     def __init__(self, screen_width, screen_height, game_save):
         self.screen_width = screen_width
         self.screen_height = screen_height
@@ -2510,7 +2551,7 @@ class ResultsScreen:
             1: {"s": 1365, "a": 1200, "b": 1050, "c": 850, "d": 650},
             2: {"s": 1720, "a": 1500, "b": 1300, "c": 1050, "d": 800},
             3: {"s": 1770, "a": 1565, "b": 1380, "c": 1150, "d": 850},
-            4: {"s": 3665, "a": 3220, "b": 2860, "c": 2380, "d": 1760},
+            4: {"s": 4000, "a": 3665, "b": 3220, "c": 2860, "d": 2380},
         }
         
         # Enhanced animation states
@@ -2540,7 +2581,7 @@ class ResultsScreen:
         self.victory_music_started = False
         self.victory_music_finished = False
         self.rank_music_started = False
-        self.victory_music_duration = 6.0
+        self.victory_music_duration = 6.5
         
         # Cache colors and save data
         self._cached_colors = {}
@@ -2554,14 +2595,6 @@ class ResultsScreen:
         self.color_caching_complete = False
         self.music_loading_complete = False
         
-        # DEBUG: Add debug flag
-        self.debug_mode = True
-        
-    def debug_print(self, message):
-        """Print debug messages if debug mode is enabled"""
-        if self.debug_mode:
-            print(f"[RESULTS_DEBUG] {message}")
-        
     def configure_timing(self, first_stat_delay=0.5, stat_interval=1.2):
         """Configure the timing for stat animations"""
         self.stat_display_delay = first_stat_delay
@@ -2569,47 +2602,17 @@ class ResultsScreen:
         
     def show_results(self, stats, level_index=0):
         """Display the results screen with stats and save comparison"""
-        self.debug_print(f"=== SHOWING RESULTS FOR LEVEL {level_index} ===")
-        
         self.stats = stats
         self.current_level_index = level_index
         self.results_shown = True
         self.animation_time = 0
         self.show_time = pygame.time.get_ticks()
         
-        # DEBUG: Log current performance
-        current_time = stats.completion_time
-        current_score = stats.calculate_score() if hasattr(stats, 'calculate_score') else 0
-        current_rank = self.get_level_rank(level_index)
-        
-        self.debug_print(f"Current Performance:")
-        self.debug_print(f"  Time: {current_time:.3f} seconds")
-        self.debug_print(f"  Score: {current_score}")
-        self.debug_print(f"  Rank: {current_rank}")
-        
         # Cache previous save data BEFORE calling save_level_result
         self._cache_save_data(level_index)
         
-        # DEBUG: Log previous best data
-        self.debug_print(f"Previous Best from Save:")
-        self.debug_print(f"  Time: {self._cached_save_data['best_time']}")
-        self.debug_print(f"  Score: {self._cached_save_data['best_score']}")
-        self.debug_print(f"  Rank: {self._cached_save_data['best_rank']}")
-        
-        # Check for improvements MANUALLY before saving
-        is_time_best = current_time < self._cached_save_data['best_time']
-        is_score_best = current_score > self._cached_save_data['best_score']
-        rank_values = {"S": 6, "A": 5, "B": 4, "C": 3, "D": 2, "E": 1}
-        is_rank_best = rank_values[current_rank] > rank_values[self._cached_save_data['best_rank']]
-        
-        self.debug_print(f"Improvement Analysis:")
-        self.debug_print(f"  Time improved? {is_time_best} ({current_time:.3f} < {self._cached_save_data['best_time']:.3f})")
-        self.debug_print(f"  Score improved? {is_score_best} ({current_score} > {self._cached_save_data['best_score']})")
-        self.debug_print(f"  Rank improved? {is_rank_best} ({current_rank} vs {self._cached_save_data['best_rank']})")
-        
         # Now save the results (this may update the save file)
         self.improvements = self.game_save.save_level_result(level_index, stats, self)
-        self.debug_print(f"GameSave returned improvements: {self.improvements}")
         
         # Reset animation values
         self.title_alpha = 0
@@ -2646,27 +2649,29 @@ class ResultsScreen:
         
     def _cache_save_data(self, level_index):
         """Cache previous save data for comparison"""
-        self.debug_print(f"Caching save data for level {level_index}")
-        
         # Get the raw save data
         level_data = self.game_save.get_level_best(level_index)
-        self.debug_print(f"Raw level data from save: {level_data}")
         
         if level_data:
             self._cached_save_data = {
                 'best_time': level_data.get('best_time', float('inf')),
                 'best_score': level_data.get('best_score', 0),
-                'best_rank': level_data.get('best_rank', 'E')
+                'best_rank': level_data.get('best_rank', 'E'),
+                'best_rings': level_data.get('best_rings', 0),
+                'best_enemies': level_data.get('best_enemies', 0),
+                'best_secrets': level_data.get('best_secrets', 0),
+                'best_deaths': level_data.get('best_deaths', float('inf'))
             }
         else:
-            self.debug_print("No previous save data found - this is a first completion")
             self._cached_save_data = {
                 'best_time': float('inf'),
                 'best_score': 0,
-                'best_rank': 'E'
+                'best_rank': 'E',
+                'best_rings': 0,
+                'best_enemies': 0,
+                'best_secrets': 0,
+                'best_deaths': float('inf')
             }
-            
-        self.debug_print(f"Cached save data: {self._cached_save_data}")
         
     def get_level_rank(self, level_index=None):
         """Get rank for specific level using appropriate thresholds"""
@@ -2864,7 +2869,7 @@ class ResultsScreen:
                 if not self.rank_music_started:
                     self.start_rank_music(current_rank)
             
-            # Enhanced sparkle system for S rank (unchanged)
+            # Enhanced sparkle system for S rank
             if (self.stats and self.get_level_rank() == "S" and 
                 rank_elapsed > 1.0 and len(self.sparkle_particles) < 30):
                 if rank_elapsed % 0.1 < dt:
@@ -2879,7 +2884,7 @@ class ResultsScreen:
             if particle["life"] <= 0:
                 self.sparkle_particles.remove(particle)
                 
-                # Update E rank fragments
+        # Update E rank fragments
         for fragment in self.rank_fragments:
             fragment['x'] += fragment['vx'] * dt
             fragment['y'] += fragment['vy'] * dt
@@ -2995,29 +3000,24 @@ class ResultsScreen:
         if (self.color_caching_complete and not self.stats_to_show and 
             elapsed > self.stat_display_delay):
             
-            self.debug_print("=== BUILDING STATS TO SHOW ===")
-            
             # Get current performance data
             current_score = self.stats.calculate_score() if hasattr(self.stats, 'calculate_score') else 0
             current_time = self.stats.completion_time
             current_rank = self.get_level_rank()
-            
-            self.debug_print(f"Building stats with current data:")
-            self.debug_print(f"  Time: {current_time}")
-            self.debug_print(f"  Score: {current_score}")
-            self.debug_print(f"  Cached best time: {self._cached_save_data['best_time']}")
-            self.debug_print(f"  Cached best score: {self._cached_save_data['best_score']}")
+            current_rings = self.stats.rings_collected
+            current_enemies = self.stats.enemies_defeated
+            current_secrets = self.stats.secrets_found if hasattr(self.stats, 'secrets_found') else 0
+            current_deaths = self.stats.deaths
             
             # Check for improvements using cached data
             is_time_best = current_time < self._cached_save_data['best_time']
             is_score_best = current_score > self._cached_save_data['best_score']
+            is_rings_best = current_rings > self._cached_save_data['best_rings']
+            is_enemies_best = current_enemies > self._cached_save_data['best_enemies']
+            is_secrets_best = current_secrets > self._cached_save_data['best_secrets']
+            is_deaths_best = current_deaths < self._cached_save_data['best_deaths']
             rank_values = {"S": 6, "A": 5, "B": 4, "C": 3, "D": 2, "E": 1}
             is_rank_best = rank_values[current_rank] > rank_values[self._cached_save_data['best_rank']]
-            
-            self.debug_print(f"Final improvement flags:")
-            self.debug_print(f"  is_time_best: {is_time_best}")
-            self.debug_print(f"  is_score_best: {is_score_best}")
-            self.debug_print(f"  is_rank_best: {is_rank_best}")
             
             self.stats_to_show = []
             
@@ -3038,11 +3038,11 @@ class ResultsScreen:
             self.stats_to_show.append({
                 "key": "rings", 
                 "label": "Coins:", 
-                "value": str(self.stats.rings_collected),
-                "color": self._cached_colors.get('rings', (255, 255, 255)),
+                "value": str(current_rings),
+                "color": (100, 255, 150) if is_rings_best else self._cached_colors.get('rings', (255, 255, 255)),
                 "alpha": 0, 
                 "shown": False,
-                "is_best": False,  # Rings don't have best tracking yet
+                "is_best": is_rings_best,
                 "shift_offset": 0,
                 "best_alpha": 0
             })
@@ -3051,25 +3051,25 @@ class ResultsScreen:
             self.stats_to_show.append({
                 "key": "enemies", 
                 "label": "Enemies:", 
-                "value": str(self.stats.enemies_defeated),
-                "color": self._cached_colors.get('enemies', (255, 255, 255)),
+                "value": str(current_enemies),
+                "color": (100, 255, 150) if is_enemies_best else self._cached_colors.get('enemies', (255, 255, 255)),
                 "alpha": 0, 
                 "shown": False,
-                "is_best": False,  # Enemies don't have best tracking yet
+                "is_best": is_enemies_best,
                 "shift_offset": 0,
                 "best_alpha": 0
             })
             
             # Secrets (if any)
-            if self.stats.secrets_found > 0:
+            if current_secrets > 0:
                 self.stats_to_show.append({
                     "key": "secrets", 
                     "label": "Secrets:", 
-                    "value": str(self.stats.secrets_found),
-                    "color": (255, 255, 0),
+                    "value": str(current_secrets),
+                    "color": (100, 255, 150) if is_secrets_best else (255, 255, 0),
                     "alpha": 0, 
                     "shown": False,
-                    "is_best": False,
+                    "is_best": is_secrets_best,
                     "shift_offset": 0,
                     "best_alpha": 0
                 })
@@ -3078,11 +3078,11 @@ class ResultsScreen:
             self.stats_to_show.append({
                 "key": "deaths", 
                 "label": "Deaths:", 
-                "value": str(self.stats.deaths),
-                "color": self._cached_colors.get('deaths', (255, 255, 255)),
+                "value": str(current_deaths),
+                "color": (100, 255, 150) if is_deaths_best else self._cached_colors.get('deaths', (255, 255, 255)),
                 "alpha": 0, 
                 "shown": False,
-                "is_best": False,
+                "is_best": is_deaths_best,
                 "shift_offset": 0,
                 "best_alpha": 0
             })
@@ -3092,17 +3092,13 @@ class ResultsScreen:
                 "key": "score", 
                 "label": "Score:", 
                 "value": str(current_score),
-                "color": (255, 255, 100) if not is_score_best else (100, 255, 150),
+                "color": (100, 255, 150) if is_score_best else (255, 255, 100),
                 "alpha": 0, 
                 "shown": False,
                 "is_best": is_score_best,
                 "shift_offset": 0,
                 "best_alpha": 0
             })
-            
-            self.debug_print(f"Created {len(self.stats_to_show)} stats to show")
-            for i, stat in enumerate(self.stats_to_show):
-                self.debug_print(f"  {i}: {stat['key']} = {stat['value']}, is_best = {stat['is_best']}")
             
             self.stat_start_time = elapsed
         
@@ -3116,21 +3112,16 @@ class ResultsScreen:
                 if time_since_start >= stat_should_start:
                     if not stat["shown"]:
                         stat["shown"] = True
-                        if stat["is_best"]:
-                            self.debug_print(f"Stat {stat['key']} marked as NEW BEST!")
                     
                     # Animate alpha for this stat
                     stat_progress = min((time_since_start - stat_should_start) / 0.8, 1.0)
                     stat["alpha"] = int(255 * stat_progress)
                     
-                    # Animate "New Best!" effects
+                    # Animate "New Best!" effects for ANY stat that's a best
                     if stat["is_best"] and stat_progress > 0.5:
                         best_progress = min((stat_progress - 0.5) / 0.5, 1.0)
                         stat["shift_offset"] = int(-60 * best_progress)  # Shift left
                         stat["best_alpha"] = int(255 * best_progress)
-                        
-                        if best_progress > 0.8 and stat["key"] in ["time", "score"]:
-                            self.debug_print(f"NEW BEST animation playing for {stat['key']}!")
     
     def get_rings_color(self, rings_count):
         """Get color for rings based on count"""
@@ -3316,7 +3307,7 @@ class ResultsScreen:
                 
                 screen.blit(value_surf, value_rect)
                 
-                # Draw "New Best!" indicator
+                # Draw "New Best!" indicator for ANY stat that's a best
                 if stat_info["is_best"] and stat_info["best_alpha"] > 0:
                     best_text = "New Best!"
                     best_surf = self.font_small.render(best_text, True, (255, 215, 0))  # Gold color
@@ -3465,7 +3456,7 @@ class ResultsScreen:
                                                    (start_point[1] + end_point[1]) // 2)
                                 screen.blit(crack_surf, crack_rect)
                 
-                return  # Skip the normal rank drawing for E rank
+                return  # Skip the normal rank drawing for E rank which has custom rendering
             
             # Draw main rank text (unless it's E rank which has custom rendering)
             if rank != "E":
@@ -3474,7 +3465,7 @@ class ResultsScreen:
             
             # Additional rank-specific decorative effects
             if rank == "S":
-                # Golden particle ring around S rank (unchanged)
+                # Golden particle ring around S rank
                 particle_count = 8
                 ring_radius = 100
                 current_time = pygame.time.get_ticks() / 1000.0
@@ -3490,7 +3481,7 @@ class ResultsScreen:
                     screen.blit(particle_surf, (int(particle_x - 4), int(particle_y - 4)))
             
             elif rank in ["A", "B"]:
-                # Pulsing border for A/B ranks (unchanged)
+                # Pulsing border for A/B ranks
                 border_alpha = int(100 + 50 * math.sin(pygame.time.get_ticks() * 0.005))
                 border_color = (*rank_color, border_alpha)
                 border_rect = pygame.Rect(rank_rect.x - 20, rank_rect.y - 10, 
@@ -3672,6 +3663,8 @@ class GameSave:
         rank = results_screen.get_level_rank(level_index)
         score = stats.calculate_score()
         time = stats.completion_time
+        rings_collected = stats.rings_collected
+        deaths = stats.deaths
         
         level_key = str(level_index)
         
@@ -3681,6 +3674,8 @@ class GameSave:
                 "best_rank": "E",
                 "best_time": float('inf'),
                 "best_score": 0,
+                "best_rings": 0,
+                "fewest_deaths": float('inf'),
                 "attempts": 0,
                 "completed": False
             }
@@ -3712,6 +3707,18 @@ class GameSave:
             improvements.append(f"New best score: {score}")
             save_needed = True
         
+        # Check rings improvement (more rings is better)
+        if rings_collected > level_data["best_rings"]:
+            level_data["best_rings"] = rings_collected
+            improvements.append(f"New best rings: {rings_collected}")
+            save_needed = True
+        
+        # Check deaths improvement (fewer deaths is better)
+        if deaths < level_data["fewest_deaths"]:
+            level_data["fewest_deaths"] = deaths
+            improvements.append(f"New fewest deaths: {deaths}")
+            save_needed = True
+        
         # Always update total playtime
         self.data["total_playtime"] += time
         
@@ -3734,7 +3741,13 @@ class GameSave:
         """Get best results for a specific level"""
         level_key = str(level_index)
         if level_key in self.data["levels"]:
-            return self.data["levels"][level_key]
+            # Handle legacy saves that might not have rings/deaths data
+            level_data = self.data["levels"][level_key]
+            if "best_rings" not in level_data:
+                level_data["best_rings"] = 0
+            if "fewest_deaths" not in level_data:
+                level_data["fewest_deaths"] = float('inf')
+            return level_data
         return None
     
     def display_best_time(self, level_index):
@@ -3757,6 +3770,20 @@ class GameSave:
         if level_data:
             return level_data["best_score"]
         return 0
+    
+    def display_best_rings(self, level_index):
+        """Display the best rings collected for a level"""
+        level_data = self.get_level_best(level_index)
+        if level_data:
+            return level_data["best_rings"]
+        return 0
+    
+    def display_fewest_deaths(self, level_index):
+        """Display the fewest deaths for a level"""
+        level_data = self.get_level_best(level_index)
+        if level_data and level_data["fewest_deaths"] < float('inf'):
+            return level_data["fewest_deaths"]
+        return "N/A"
     
     def is_level_completed(self, level_index):
         """Check if a level has been completed"""

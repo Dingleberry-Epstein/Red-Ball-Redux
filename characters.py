@@ -894,7 +894,6 @@ class BossState(Enum):
     VULNERABLE = "vulnerable"
     STUNNED = "stunned"
 
-
 class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
     """Rebuilt Cubodeez boss with clean state management and proper Pymunk integration"""
     
@@ -927,16 +926,17 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         self.state_timer = 0.0
         self.action_cooldown = 2.0  # Time between attacks
         
-        # Jump mechanics
-        self.jump_force = 1000
-        self.jump_height = 600
-        self.max_jump_distance = 800
+        # Jump mechanics - Improved for better accuracy
+        self.jump_force = 1200
+        self.jump_height = 500
+        self.max_jump_distance = 600  # Reduced to prevent map jumping
         self.is_grounded = True
-        self.ground_check_distance = size + 20
+        self.ground_check_distance = size + 30
         
-        # Target and landing system
+        # Target and landing system - Fixed for reliable landing
         self.target_position = (0, 0)
-        self.landing_radius = 150
+        self.last_player_position = (x, y)  # Track last known player position
+        self.landing_radius = 200  # Increased for more forgiving landing
         self.show_target_marker = False
         self.target_locked = False
         
@@ -952,6 +952,10 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         self.flash_timer = 0.0
         self.eye_color = (255, 255, 0)  # Default yellow
         
+        # Screen shake system
+        self.screen_shake_timer = 0.0
+        self.screen_shake_intensity = 0
+        
         # Sound effects
         self._load_sounds()
         
@@ -961,18 +965,25 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         print(f"Cubodeez initialized at ({x}, {y}) - State: {self.state}")
 
     def _setup_physics(self):
-        """Initialize physics body and collision handling"""
+        """Initialize physics body and collision handling with proper square hitbox"""
         # Create physics body
         self.body = pymunk.Body(self.mass, pymunk.moment_for_box(self.mass, (self.size, self.size)))
         self.body.position = self.spawn_x, self.spawn_y
         
-        # Create collision shape
-        self.shape = pymunk.Poly.create_box(self.body, (self.size, self.size))
-        self.shape.elasticity = 0.2
-        self.shape.friction = 0.8
+        # Create collision shape - Use exact box dimensions for proper square hitbox
+        half_size = self.size / 2
+        vertices = [
+            (-half_size, -half_size),
+            (half_size, -half_size),
+            (half_size, half_size),
+            (-half_size, half_size)
+        ]
+        self.shape = pymunk.Poly(self.body, vertices)
+        self.shape.elasticity = 0.1  # Reduced bounce
+        self.shape.friction = 0.9  # Increased friction for better control
         
         # Set collision type
-        self.collision_type = self.physics.collision_types.get("boss", 5)
+        self.collision_type = self.physics.collision_types.get("square", 5)
         self.shape.collision_type = self.collision_type
         
         # Store reference for collision callbacks
@@ -981,37 +992,8 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         # Add to physics space
         self.physics.space.add(self.body, self.shape)
         
-        # Setup collision handlers using new Pymunk API
+        # Setup collision handlers using new Pymunk 7.0.0 API
         self._setup_collision_handlers()
-
-    def _setup_collision_handlers(self):
-        """Setup collision handlers using new Pymunk API"""
-        ball_type = self.physics.collision_types.get("ball", 1)
-        ground_type = self.physics.collision_types.get("ground", 2)
-        
-        # Boss vs Player collision
-        def boss_player_collision_begin(arbiter, space, data):
-            boss_shape, player_shape = arbiter.shapes
-            if hasattr(boss_shape, 'boss_ref'):
-                boss_shape.boss_ref._handle_player_collision()
-            return True
-            
-        self.physics.space.on_collision(
-            self.collision_type, ball_type,
-            begin=boss_player_collision_begin
-        )
-        
-        # Boss vs Ground collision
-        def boss_ground_collision_begin(arbiter, space, data):
-            boss_shape, ground_shape = arbiter.shapes
-            if hasattr(boss_shape, 'boss_ref'):
-                return boss_shape.boss_ref._handle_ground_collision(arbiter)
-            return True
-            
-        self.physics.space.on_collision(
-            self.collision_type, ground_type,
-            begin=boss_ground_collision_begin
-        )
 
     def _setup_visuals(self):
         """Setup visual appearance and animations"""
@@ -1053,21 +1035,81 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
 
     def _load_sounds(self):
         """Load sound effects with fallbacks"""
-        self.sounds = {}
-        sound_files = {
-            'jump': 'boss_jump.mp3',
-            'land': 'boss_land.mp3',
-            'hurt': os.path.join("assets", "sounds", "boss_hurt.mp3"),
-            'squish': 'explosion.mp3'
-        }
+        try:
+            self.sounds = {
+                'jump': pygame.mixer.Sound(os.path.join("assets", "sounds", "jump.mp3")), 
+                'land': pygame.mixer.Sound(os.path.join("assets", "sounds", "squish.mp3")),
+                'hurt': pygame.mixer.Sound(os.path.join("assets", "sounds", "boss_hurt.mp3"))
+            }
+        except:
+            # Fallback empty sounds if files don't exist
+            self.sounds = {'jump': None, 'land': None, 'hurt': None}
+
+    def _setup_collision_handlers(self):
+        """Setup collision handlers using new Pymunk 7.0.0 API"""
+        ball_type = self.physics.collision_types.get("ball", 1)
+        ground_type = self.physics.collision_types.get("ground", 2)
         
-        for sound_name, filename in sound_files.items():
-            try:
-                path = os.path.join("assets", "sounds", filename)
-                self.sounds[sound_name] = pygame.mixer.Sound(path)
-            except (pygame.error, FileNotFoundError):
-                print(f"Warning: Could not load {filename}")
-                self.sounds[sound_name] = None
+        # Ensure switch collision type exists (for rocket launchers)
+        if "switch" not in self.physics.collision_types:
+            self.physics.collision_types["switch"] = 6  # Assign a unique collision type for launchers
+        
+        launcher_type = self.physics.collision_types["switch"]
+        
+        # Boss vs Player collision - Updated for new API
+        def boss_player_collision_begin(arbiter, space, data):
+            boss_shape, player_shape = arbiter.shapes
+            if hasattr(boss_shape, 'boss_ref'):
+                boss_shape.boss_ref._handle_player_collision()
+            # Always process collision normally
+            return True
+            
+        self.physics.space.on_collision(
+            self.collision_type, ball_type,
+            begin=boss_player_collision_begin
+        )
+        
+        # Boss vs Ground collision - Fixed for reliable landing
+        def boss_ground_collision_begin(arbiter, space, data):
+            boss_shape, ground_shape = arbiter.shapes
+            if hasattr(boss_shape, 'boss_ref'):
+                boss_shape.boss_ref._handle_ground_collision(arbiter)
+            return True
+            
+        self.physics.space.on_collision(
+            self.collision_type, ground_type,
+            begin=boss_ground_collision_begin
+        )
+        
+        # Boss vs Launcher collision using original collision type
+        def boss_launcher_collision_begin(arbiter, space, data):
+            return self.on_hit_launcher(arbiter, space, data)
+            
+        self.physics.space.on_collision(
+            self.physics.collision_types["square"],
+            self.physics.collision_types["switch"],  # Use "switch" as in original
+            begin=boss_launcher_collision_begin
+        )
+
+    def on_hit_launcher(self, arbiter, space, data):
+        """Destroy launchers when the boss touches them"""
+        for shape in arbiter.shapes:
+            if hasattr(shape, "launcher") and shape.launcher:
+                launcher = shape.launcher
+                print(f"Boss destroyed launcher at position: {launcher.rect.center}")
+                launcher.kill()  # Remove the launcher sprite
+                
+                # Safe removal from physics space
+                try:
+                    # Remove body and shape from space if they're still there
+                    if launcher.body in space.bodies:
+                        space.remove(launcher.body)
+                    if launcher.shape in space.shapes:
+                        space.remove(launcher.shape)
+                except Exception as e:
+                    print(f"Error removing launcher from physics space: {e}")
+        
+        return True
 
     def _handle_player_collision(self):
         """Handle collision with player - always lethal"""
@@ -1076,41 +1118,26 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
             
         print("Boss squished the player!")
         
-        self._add_screen_shake(0.8, 20)
+        # Add screen shake instead of just boss shake
+        self._add_screen_shake(1.0, 30)
 
     def _handle_ground_collision(self, arbiter):
-        """Handle ground collision with proper state-based logic"""
-        # Always allow collision when not jumping
+        """Handle ground collision with improved landing logic"""
+        # Always set grounded when touching ground
+        self._set_grounded(True)
+        
+        # If not jumping, process collision normally
         if self.state != BossState.JUMPING:
-            self._set_grounded(True)
             return True
         
-        # During jump, only land if falling and near target
-        if self.body.velocity.y <= 0:  # Still ascending
-            arbiter.process_collision = False
-            return True
-        
-        # Check if we're near our intended landing spot
-        contact_point = arbiter.contact_point_set.points[0].point_a if arbiter.contact_point_set.points else self.body.position
-        distance_to_target = math.sqrt(
-            (contact_point.x - self.target_position[0]) ** 2 + 
-            (contact_point.y - self.target_position[1]) ** 2
-        )
-        
-        # Land if close enough to target or falling too fast
-        should_land = (
-            distance_to_target <= self.landing_radius or
-            self.body.velocity.y > 800 or  # Falling very fast
-            self.state_timer > 4.0  # Been jumping too long
-        )
-        
-        if should_land:
-            self._execute_landing(contact_point)
-            return True
+        # During jump state, check if we should land
+        if self.body.velocity.y > 0:  # Falling down
+            self._execute_landing(self.body.position)
         else:
-            # Phase through ground if not at target
+            # Still ascending, but touching ground - bounce slightly
             arbiter.process_collision = False
-            return True
+        
+        return True
 
     def _set_grounded(self, grounded):
         """Update grounded state with proper logging"""
@@ -1121,10 +1148,15 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
 
     def _execute_landing(self, landing_point):
         """Execute landing sequence with proper state transition"""
-        print(f"Boss landing at {landing_point} - Distance to target: {math.sqrt((landing_point.x - self.target_position[0])**2 + (landing_point.y - self.target_position[1])**2):.1f}")
+        distance_to_target = math.sqrt(
+            (landing_point.x - self.target_position[0]) ** 2 + 
+            (landing_point.y - self.target_position[1]) ** 2
+        )
         
-        # Stop all movement
-        self.body.velocity = (0, 0)
+        print(f"Boss landing at {landing_point} - Distance to target: {distance_to_target:.1f}")
+        
+        # Stop vertical movement, keep some horizontal momentum
+        self.body.velocity = (self.body.velocity.x * 0.3, 0)
         
         # Update state
         self.state = BossState.LANDING
@@ -1133,16 +1165,16 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         
         # Effects
         self._play_sound('land')
-        self._add_screen_shake(0.6, 25)
+        self._add_screen_shake(0.8, 25)  # Screen shake instead of boss shake
         
         # Hide target marker
         self.show_target_marker = False
         self.target_locked = False
 
     def _check_ground_below(self):
-        """Simple ground check using ray casting"""
+        """Improved ground check using ray casting"""
         if not self.is_grounded and self.state != BossState.JUMPING:
-            # Cast ray downward
+            # Cast ray downward from center of boss
             start = self.body.position
             end = (start.x, start.y + self.ground_check_distance)
             
@@ -1153,27 +1185,31 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
             
             if query and query.shape:
                 self._set_grounded(True)
-                # Adjust position if needed
-                ground_y = query.point.y - self.size // 2
-                if self.body.position.y > ground_y:
-                    self.body.position = (self.body.position.x, ground_y)
+
+    def _update_last_player_position(self):
+        """Track player's last known position for better targeting"""
+        if self.target and hasattr(self.target, 'body'):
+            self.last_player_position = (self.target.body.position.x, self.target.body.position.y)
 
     def calculate_jump_to_player(self):
-        """Calculate jump trajectory to hit the player"""
+        """Calculate improved jump trajectory to hit the player accurately"""
         if not self.target:
             return False
         
-        # Get player position
+        # Update last known player position
+        self._update_last_player_position()
+        
+        # Get player position with velocity prediction
         player_pos = self.target.body.position
         boss_pos = self.body.position
         
-        # Calculate target with some prediction
+        # Predict player movement
         player_vel = getattr(self.target.body, 'velocity', (0, 0))
-        prediction_time = 1.0  # Predict 1 second ahead
+        prediction_time = 1.2  # Predict further ahead
         predicted_x = player_pos.x + player_vel.x * prediction_time
         predicted_y = player_pos.y
         
-        # Constrain to maximum jump distance
+        # Calculate distance and apply max jump distance constraint
         dx = predicted_x - boss_pos.x
         distance = abs(dx)
         
@@ -1184,10 +1220,11 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         # Set target position
         self.target_position = (predicted_x, predicted_y)
         
+        print(f"Jump calculated: target=({predicted_x:.1f}, {predicted_y:.1f}), distance={distance:.1f}")
         return True
 
     def execute_jump(self):
-        """Execute jump with calculated trajectory"""
+        """Execute jump with improved trajectory calculation"""
         if not self.is_grounded or self.state == BossState.JUMPING:
             return False
         
@@ -1198,16 +1235,19 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         dx = target_x - start_pos.x
         dy = target_y - start_pos.y
         
-        # Calculate jump timing and velocities
+        # Improved physics calculation
         gravity = abs(self.physics.space.gravity.y)
-        jump_time = 2.0  # Fixed jump time for consistency
         
-        # Horizontal velocity
+        # Calculate optimal jump time based on distance
+        jump_time = 1.8 + (abs(dx) / 800)  # Longer time for longer jumps
+        jump_time = min(jump_time, 2.5)  # Cap at 2.5 seconds
+        
+        # Horizontal velocity - more accurate
         vel_x = dx / jump_time
         
-        # Vertical velocity (accounting for desired height)
-        jump_height = max(self.jump_height, abs(dy) + 200)
-        vel_y = -math.sqrt(2 * gravity * jump_height)
+        # Vertical velocity - accounting for arc and target height
+        desired_height = max(self.jump_height, abs(dy) + 150)
+        vel_y = -math.sqrt(2 * gravity * desired_height)
         
         # Apply velocities
         self.body.velocity = (vel_x, vel_y)
@@ -1224,7 +1264,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         # Effects
         self._play_sound('jump')
         
-        print(f"Jump executed: velocity=({vel_x:.1f}, {vel_y:.1f}), target={self.target_position}")
+        print(f"Jump executed: velocity=({vel_x:.1f}, {vel_y:.1f}), time={jump_time:.1f}s")
         return True
 
     def take_damage(self, amount=20):
@@ -1238,7 +1278,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         
         # Visual feedback
         self.flash_timer = 0.5
-        self._add_screen_shake(0.4, 15)
+        self._add_screen_shake(0.5, 20)  # Screen shake for damage
         self._play_sound('hurt')
         
         print(f"Boss took {amount} damage! Health: {self.health}/{self.max_health}")
@@ -1278,17 +1318,42 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         self.target_locked = False
         self.shake_timer = 0.0
         self.flash_timer = 0.0
+        self.screen_shake_timer = 0.0
 
     def _play_sound(self, sound_name):
         """Play a sound effect if available"""
         sound = self.sounds.get(sound_name)
-        if sound:
-            sound.play()
+        try:
+            if sound:
+                sound.play()
+        except pygame.error as e:
+            print(f"Error playing sound '{sound_name}': {e}")
 
     def _add_screen_shake(self, duration, intensity):
-        """Add screen shake effect"""
-        self.shake_timer = max(self.shake_timer, duration)
-        self.shake_intensity = max(self.shake_intensity, intensity)
+        """Add screen shake effect that affects the entire screen"""
+        self.screen_shake_timer = max(self.screen_shake_timer, duration)
+        self.screen_shake_intensity = max(self.screen_shake_intensity, intensity)
+        
+        # Also apply to camera if available
+        if self.camera and hasattr(self.camera, 'add_shake'):
+            self.camera.add_shake(duration, intensity)
+
+    def get_screen_shake_offset(self):
+        """Get current screen shake offset for camera application"""
+        if self.screen_shake_timer <= 0:
+            return (0, 0)
+        
+        import random
+        shake_x = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity)
+        shake_y = random.randint(-self.screen_shake_intensity, self.screen_shake_intensity)
+        return (shake_x, shake_y)
+
+    def _check_map_bounds(self):
+        """Check if boss has fallen off map - using original logic"""
+        # Only reset if fallen WAY off map (original logic)
+        if self.body.position.y > getattr(self.physics, 'level_height', 2000) + 500:
+            print("Boss fell off map - resetting")
+            self.reset_to_spawn()
 
     def update_state_machine(self, dt):
         """Update the main state machine"""
@@ -1316,7 +1381,18 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         if not self.target_locked and self.target:
             self.marker_rect.center = self.target.rect.center
         
-        # Check if ready to attack
+    def _update_idle_state(self):
+        """Update idle state behavior"""
+        # Show target marker
+        if not self.show_target_marker:
+            self.show_target_marker = True
+            self.target_locked = False
+        
+        # Update marker position to follow player
+        if not self.target_locked and self.target:
+            self.marker_rect.center = self.target.rect.center
+        
+        # Check if ready to attack - original logic
         if self.state_timer >= self.action_cooldown and self.is_grounded:
             self.state = BossState.PREPARING
             self.state_timer = 0.0
@@ -1347,7 +1423,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         self.eye_color = (255, 0, 0)  # Red eyes while jumping
         
         # Timeout check to prevent infinite jumping
-        if self.state_timer > 5.0:
+        if self.state_timer > 4.0:
             print("Jump timeout - forcing landing")
             self._execute_landing(self.body.position)
 
@@ -1377,6 +1453,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         if self.vulnerability_timer >= self.vulnerability_duration:
             self.is_vulnerable = False
             self.flash_timer = 0.0
+            self.damage_taken_this_cycle = False
             self.state = BossState.IDLE
             self.state_timer = 0.0
             self.eye_color = (255, 255, 0)  # Back to yellow
@@ -1388,19 +1465,8 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         # Start with base image
         self.image = self.base_image.copy()
         
-        # Apply screen shake to position
-        shake_x = 0
-        shake_y = 0
-        if self.shake_timer > 0:
-            self.shake_timer -= 1/60
-            shake_x = random.randint(-self.shake_intensity, self.shake_intensity)
-            shake_y = random.randint(-self.shake_intensity, self.shake_intensity)
-        
-        # Update rect position
-        self.rect.center = (
-            self.body.position.x + shake_x,
-            self.body.position.y + shake_y
-        )
+        # Update rect position (no individual boss shake, screen shake handles this)
+        self.rect.center = (self.body.position.x, self.body.position.y)
         
         # Draw eyes
         self._draw_eyes()
@@ -1442,6 +1508,12 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         
         dt = 1/60  # Assuming 60 FPS
         
+        # Update screen shake timer
+        if self.screen_shake_timer > 0:
+            self.screen_shake_timer -= dt
+            if self.screen_shake_timer <= 0:
+                self.screen_shake_intensity = 0
+        
         # Check for ground
         self._check_ground_below()
         
@@ -1451,7 +1523,7 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         # Update visuals
         self.update_visuals()
         
-        # Check if fallen off map
+        # Check if fallen off map (original logic only)
         if self.body.position.y > getattr(self.physics, 'level_height', 2000) + 500:
             self.reset_to_spawn()
 
@@ -1465,38 +1537,6 @@ class Cubodeez_The_Almighty_Cube(pygame.sprite.Sprite):
         # Draw boss (sprite system handles this automatically, but included for completeness)
         boss_screen_pos = camera.apply_rect(self.rect)
         screen.blit(self.image, boss_screen_pos)
-        
-        # Debug information
-        if self.debug_mode:
-            self._draw_debug_info(screen, camera)
-
-    def _draw_debug_info(self, screen, camera):
-        """Draw debug information"""
-        # Health bar
-        health_bar_width = 100
-        health_bar_height = 10
-        health_ratio = self.health / self.max_health
-        
-        health_bar_pos = ((
-            self.body.position.x - health_bar_width // 2,
-            self.body.position.y - self.size // 2 - 20
-        ))
-        
-        # Background
-        pygame.draw.rect(screen, (255, 0, 0), 
-                        (*health_bar_pos, health_bar_width, health_bar_height))
-        # Health
-        pygame.draw.rect(screen, (0, 255, 0),
-                        (*health_bar_pos, int(health_bar_width * health_ratio), health_bar_height))
-        
-        # State text
-        font = pygame.font.Font(None, 24)
-        state_text = font.render(f"State: {self.state.value}", True, (255, 255, 255))
-        state_pos = ((
-            self.body.position.x - state_text.get_width() // 2,
-            self.body.position.y - self.size // 2 - 40
-        ))
-        screen.blit(state_text, state_pos)
 
     # Properties for compatibility
     @property

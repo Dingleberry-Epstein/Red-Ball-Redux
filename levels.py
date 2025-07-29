@@ -1895,6 +1895,38 @@ class BossArena(SpaceLevel):
             self._physics.level_width = self.width
         if hasattr(self, 'height'):
             self._physics.level_height = self.height
+
+    def setup_launcher_collision(self, arbiter, space, data):
+        """Setup collision handler for boss vs rocket launchers"""
+        # Ensure launcher collision type exists
+        if "launcher" not in self._physics.collision_types:
+            self._physics.collision_types["launcher"] = 6  # Assign a unique collision type for launchers
+        
+        # Setup boss vs launcher collision handler
+        boss_launcher_handler = self._physics.space.on_collision(
+            self._physics.collision_types["boss"],
+            self._physics.collision_types["launcher"]
+        )
+        boss_launcher_handler.begin = self.on_hit_launcher
+
+    def on_hit_launcher(self, arbiter, space, data):
+        """Destroy rocket launchers when the boss touches them"""
+        for shape in arbiter.shapes:
+            if hasattr(shape, "launcher") and shape.launcher:
+                launcher = shape.launcher
+                print(f"Boss destroyed rocket launcher at position: {launcher.rect.center}")
+                
+                # Remove the launcher sprite
+                launcher.kill()
+                
+                # Remove from physics space
+                self._physics.space.remove(launcher.body, launcher.shape)
+                
+                # Optional: Add destruction effects
+                # self.add_explosion_effect(launcher.rect.center)
+                # self.add_screen_shake(0.3, 10)
+        
+        return True
     
     def _setup_boss_music(self):
         """Set up boss-specific music"""
@@ -2425,7 +2457,7 @@ class BossArena(SpaceLevel):
                     # Fade out music
                     pygame.mixer_music.fadeout(500)
                     # Set state to main menu
-                    self._game_ref._state = "main_menu"
+                    self._game_ref.state = "main_menu"
                     # Play menu music
                     try:
                         pygame.mixer_music.load(os.path.join("assets", "music", "theme.mp3"))
