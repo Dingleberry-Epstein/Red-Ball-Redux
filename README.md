@@ -1,5 +1,3 @@
-# Red Ball Redux
-
 <img width="150%" height="150%" alt="title" src="https://github.com/user-attachments/assets/3001a8af-f1ca-454c-9504-be8834fce9e7" />
 
 <br>
