@@ -3818,6 +3818,22 @@ class GameSave:
         seconds = time_seconds % 60
         return f"{minutes:02d}:{seconds:05.2f}"
     
+    def wipe_save_data(self):
+        """Wipe all save data and reset to a fresh state"""
+        try:
+            # Reset data to new save structure
+            self.data = self.create_new_save()
+            
+            # Save the empty data to file (encrypts and writes the fresh save)
+            self.save_to_file()
+            
+            print("Save data wiped successfully - fresh save created")
+            return True
+            
+        except Exception as e:
+            print(f"Failed to wipe save data: {e}")
+            return False
+    
     def export_save(self, export_file):
         """Export save data to a readable JSON file (for debugging/backup)"""
         try:
