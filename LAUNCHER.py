@@ -32,7 +32,7 @@ class GameLauncher:
             'height': 600,
             'fullscreen': False,
             'framerate': 60,
-            'vsync': True
+            'vsync': False
         }
         
         # Load existing settings if they exist
