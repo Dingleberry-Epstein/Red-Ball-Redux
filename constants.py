@@ -11,8 +11,6 @@ WHITE = (255, 255, 255)
 GRAY = (150, 150, 150)
 LIGHT_GRAY = (200, 200, 200)
 
-
-
 CURRENT_TRACK = None
 
 # Default values that can be overridden

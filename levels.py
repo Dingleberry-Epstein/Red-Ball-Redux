@@ -35,7 +35,9 @@ class PymunkLevel:
         self._gamesave = gamesave
         # Initialize dialogue system
         self._setup_dialogue_system()
-        
+        # flag image
+        original_flag_image = pygame.image.load(os.path.join("assets", "world building", "flag.png")).convert_alpha()
+        self._flag_image = pygame.transform.scale(original_flag_image, (62, 64))
         # Play level music
         if play_music:
             self._setup_music()
@@ -908,8 +910,7 @@ class PymunkLevel:
             if buffered_viewport.colliderect(tile.rect):
                 # Get flag_image from constants
                 try:
-                    from constants import flag_image
-                    screen.blit(flag_image, self._camera.apply(tile))
+                    screen.blit(self._flag_image, self._camera.apply(tile))
                 except ImportError:
                     # Fallback if flag_image not available
                     pygame.draw.rect(screen, (255, 0, 0), self._camera.apply_rect(tile.rect), 3)
@@ -1605,8 +1606,7 @@ class CaveLevel(PymunkLevel):
             if buffered_viewport.colliderect(tile.rect):
                 # Get flag_image from constants
                 try:
-                    from constants import flag_image
-                    screen.blit(flag_image, self._camera.apply(tile))
+                    screen.blit(self._flag_image, self._camera.apply(tile))
                 except ImportError:
                     # Fallback if flag_image not available
                     pygame.draw.rect(screen, (255, 0, 0), self._camera.apply_rect(tile.rect), 3)
@@ -1793,8 +1793,7 @@ class SpaceLevel(PymunkLevel):
             if buffered_viewport.colliderect(tile.rect):
                 # Get flag_image from constants
                 try:
-                    from constants import flag_image
-                    screen.blit(flag_image, self._camera.apply(tile))
+                    screen.blit(self._flag_image, self._camera.apply(tile))
                 except ImportError:
                     # Fallback if flag_image not available
                     pygame.draw.rect(screen, (255, 0, 0), self._camera.apply_rect(tile.rect), 3)
