@@ -28,8 +28,8 @@ class GameLauncher:
         
         # Game settings with defaults
         self.settings = {
-            'width': 1280,
-            'height': 720,
+            'width': 800,
+            'height': 600,
             'fullscreen': False,
             'framerate': 60,
             'vsync': True
