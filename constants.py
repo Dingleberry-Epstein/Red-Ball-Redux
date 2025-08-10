@@ -1,7 +1,9 @@
 import pygame, os
 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
+pygame.mixer.init()
+pygame.font.init()
+pygame.display.init()
+
 PLAYER_WIDTH = 64
 PLAYER_HEIGHT = 64
 BLACK = (0, 0, 0)
@@ -9,13 +11,15 @@ WHITE = (255, 255, 255)
 GRAY = (150, 150, 150)
 LIGHT_GRAY = (200, 200, 200)
 
-pygame.mixer.init()
-pygame.font.init()
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
-# flag image
-original_flag_image = pygame.image.load(os.path.join("assets", "world building", "flag.png")).convert_alpha()
-flag_image = pygame.transform.scale(original_flag_image, (62, 64))
-daFont = os.path.join("assets", "Daydream.ttf")
 
 CURRENT_TRACK = None
+
+# Default values that can be overridden
+SCREEN_WIDTH = 1280
+SCREEN_HEIGHT = 720
+TARGET_FPS = 60
+FULLSCREEN = False
+VSYNC = True
+
+daFont = os.path.join("assets", "Daydream.ttf")

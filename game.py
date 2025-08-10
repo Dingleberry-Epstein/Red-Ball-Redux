@@ -1,21 +1,49 @@
-import pygame, pygame_gui, os, random, objects, threading, time
+import pygame, pygame_gui, os, random, objects, threading, time, json
 from constants import *
 from levels import SpaceLevel, CaveLevel, PymunkLevel, levels, spawn_points, BossArena
 from utils import PhysicsManager, SceneManager, MapSystem, GameSave
 
 class Game:
-    """Main game using impulse-based ball movement with improved pygame-gui UI"""
-    def __init__(self):
+    def __init__(self, settings=None):
         pygame.init()
         pygame.mixer.init()
-        pygame.mixer_music.load(os.path.join("assets", "music", "theme.mp3"))
-        global CURRENT_TRACK
-        CURRENT_TRACK = 'menu'
-        pygame.mixer_music.set_volume(0.75)  # Set volume to 75%
-
-        self._screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        
+        # Load or use provided settings
+        if settings is None:
+            settings = self.load_game_settings()
+        
+        # Apply display settings
+        display_flags = pygame.FULLSCREEN if settings['fullscreen'] else 0
+        self._screen = pygame.display.set_mode(
+            (settings['width'], settings['height']), 
+            display_flags
+        )
+        
+        # Update global constants if they exist
+        try:
+            import constants
+            constants.SCREEN_WIDTH = settings['width'] 
+            constants.SCREEN_HEIGHT = settings['height']
+        except:
+            pass
+        
+        # Set framerate settings
+        self._target_fps = settings.get('framerate', 60)
+        self._use_vsync = settings.get('vsync', True)
+        
+        # IMPORTANT: Load the music AFTER mixer initialization
+        try:
+            pygame.mixer_music.load(os.path.join("assets", "music", "theme.mp3"))
+            global CURRENT_TRACK
+            CURRENT_TRACK = 'menu'
+            pygame.mixer_music.set_volume(0.75)
+        except pygame.error as e:
+            print(f"Warning: Could not load music: {e}")
+        
+        # Continue with rest of your existing Game.__init__ code...
         self._clock = pygame.time.Clock()
         self._running = True
+
         self._state = "intro"  # Start with intro state
         self._credits = None
         
@@ -122,6 +150,26 @@ class Game:
 
         # Setup loading screen
         self._setup_loading_screen()
+
+    def load_game_settings(self):
+        """Load settings from file, use defaults if file doesn't exist"""
+        default_settings = {
+            'width': 1280,
+            'height': 720,
+            'fullscreen': False,
+            'framerate': 60,
+            'vsync': True
+        }
+        
+        try:
+            with open("game_settings.json", 'r') as f:
+                saved_settings = json.load(f)
+                # Merge with defaults
+                default_settings.update(saved_settings)
+        except:
+            pass  # Use defaults
+        
+        return default_settings
 
     def _setup_loading_tips(self):
         """Setup loading tips system"""
@@ -813,11 +861,14 @@ class Game:
         return text_surface.get_rect(topleft=position)
 
     def run(self):
-        """Main game loop"""
+        """Modified run method to use dynamic framerate"""
+        global dt
         while self._running:
-            # Calculate delta time for smooth physics
-            global dt
-            dt = self._clock.tick(60) / 1000.0  # Convert to seconds
+            # Handle framerate based on settings
+            if self._use_vsync:
+                dt = self._clock.tick() / 1000.0  # VSync - no limit
+            else:
+                dt = self._clock.tick(self._target_fps) / 1000.0  # Use target FPS
 
             # Update loading animation
             self._update_loading_animation(dt)
@@ -1343,9 +1394,11 @@ class Game:
         # Calculate level positions first
         self._setup_level_grid()
         
+        # Calculate proper spacing based on screen width
+        self._level_spacing = SCREEN_WIDTH // 7  # Adaptive spacing based on screen width
+        
         # Then properly center the first level
-        spacing = 180
-        self._target_scroll = -self._selected_level * spacing + SCREEN_WIDTH // 2
+        self._target_scroll = -self._selected_level * self._level_spacing + SCREEN_WIDTH // 2
         self._scroll_offset = self._target_scroll  # Set initial scroll immediately
         
         # Reset mouse interaction state
@@ -1354,7 +1407,7 @@ class Game:
         self._drag_velocity = 0
         self._drag_history = []
         
-        # Calculate level positions
+        # Calculate level positions again with new spacing
         self._setup_level_grid()
         
         # Create navigation buttons with consistent styling
@@ -1372,16 +1425,6 @@ class Game:
             text=">",
             manager=self._ui_manager,
             object_id="#nav_button"
-        )
-        
-        self._select_button = pygame_gui.elements.UIButton(
-            relative_rect=pygame.Rect(
-                (SCREEN_WIDTH // 2 - 75, SCREEN_HEIGHT // 2 + 220),
-                (150, 50)
-            ),
-            text="SELECT",
-            manager=self._ui_manager,
-            object_id="#play_button"
         )
         
         # Add back button
@@ -1426,18 +1469,21 @@ class Game:
             self._level_buttons = []
 
     def _setup_level_grid(self):
-        """Setup the positions and rectangles for level squares"""
+        """Setup the positions and rectangles for level squares with adaptive spacing"""
         self._level_positions = []
         self._level_rects = []
         
-        # Grid configuration
-        base_size = 120
-        spacing = 180
+        # Grid configuration - make spacing adaptive to screen width
+        base_size = min(120, SCREEN_WIDTH // 12)  # Adaptive base size
+        self._level_spacing = SCREEN_WIDTH // 7  # Adaptive spacing
         center_y = SCREEN_HEIGHT // 2 - 20
-        start_x = SCREEN_WIDTH // 2 - (spacing * 2.2)  # Center the grid
+        
+        # Calculate start position to center the grid properly
+        total_width = (6 - 1) * self._level_spacing  # Total width needed for all levels
+        start_x = SCREEN_WIDTH // 2 - total_width // 2
         
         for i in range(6):  # 6 levels total (5 + secret)
-            x = start_x + (i * spacing)
+            x = start_x + (i * self._level_spacing)
             y = center_y
             
             self._level_positions.append((x, y))
@@ -1513,11 +1559,10 @@ class Game:
         self._update_selected_level_from_scroll()
 
     def _clamp_scroll_bounds(self):
-        """Ensure scroll doesn't go beyond reasonable bounds"""
-        # Calculate bounds based on level positions
-        spacing = 180
-        max_scroll = spacing * 2  # Allow scrolling a bit past first level
-        min_scroll = -spacing * 6  # Allow scrolling a bit past last level
+        """Ensure scroll doesn't go beyond reasonable bounds with adaptive spacing"""
+        # Calculate bounds based on adaptive spacing
+        max_scroll = self._level_spacing  # Allow scrolling a bit past first level
+        min_scroll = -self._level_spacing * 6  # Allow scrolling a bit past last level
         
         if self._target_scroll > max_scroll:
             self._target_scroll = max_scroll
@@ -1527,7 +1572,7 @@ class Game:
             self._drag_velocity = 0
 
     def _update_selected_level_from_scroll(self):
-        """Update selected level based on current scroll position"""
+        """Update selected level based on current scroll position with adaptive spacing"""
         # Find which level is closest to screen center
         center_x = SCREEN_WIDTH // 2
         closest_level = 0
@@ -1548,11 +1593,25 @@ class Game:
         self._selected_level = closest_level
 
     def _snap_to_nearest_level(self):
-        """Snap to the nearest level after dragging ends"""
-        spacing = 180
-        # Calculate which level should be centered
-        target_level = self._selected_level
-        self._target_scroll = -target_level * spacing + SCREEN_WIDTH // 2
+        """Snap to the nearest level after dragging ends with adaptive spacing"""
+        # Calculate which level should be centered based on current scroll position
+        center_screen_x = SCREEN_WIDTH // 2
+        
+        # Find the level whose position is closest to screen center
+        closest_level = 0
+        min_distance = float('inf')
+        
+        for i in range(6):
+            if i < len(self._level_positions):
+                level_x = self._level_positions[i][0] + self._scroll_offset
+                distance = abs(level_x - center_screen_x)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_level = i
+        
+        # Snap to that level
+        self._selected_level = closest_level
+        self._target_scroll = -self._selected_level * self._level_spacing + SCREEN_WIDTH // 2
 
     def handle_level_select_input(self, event):
         """Handle input for level select"""
@@ -1662,7 +1721,7 @@ class Game:
         return False
 
     def _move_selection(self, direction):
-        """Move the selection left or right"""
+        """Move the selection left or right with adaptive spacing"""
         new_selection = self._selected_level + direction
         
         # Clamp to valid range
@@ -1673,9 +1732,8 @@ class Game:
             
         if new_selection != self._selected_level:
             self._selected_level = new_selection
-            # Update target scroll to center the selected level
-            spacing = 180
-            self._target_scroll = -self._selected_level * spacing + SCREEN_WIDTH // 2
+            # Update target scroll to center the selected level with adaptive spacing
+            self._target_scroll = -self._selected_level * self._level_spacing + SCREEN_WIDTH // 2
             # Stop any existing momentum
             self._drag_velocity = 0
 
@@ -1707,19 +1765,16 @@ class Game:
                 button.show()
 
     def draw_level_select(self, screen):
-        """Draw the level select grid as a full screen replacement"""
+        """Draw the level select grid with adaptive sizing"""
         if not self._level_select_open:
             return
-        
-        # Draw the same background as main menu (no overlay, full replacement)
-        # Background is already drawn in render_main_menu, so we just need to add the new content
         
         # Draw level select title with the same style as main menu title
         if hasattr(self, '_title_text'):
             title_text = "SELECT LEVEL"
             title_color = (255, 255, 255)
             outline_color = (0, 0, 0)
-            title_center = (SCREEN_WIDTH // 2, 120)
+            title_center = (SCREEN_WIDTH // 2, max(60, SCREEN_HEIGHT // 10))  # Adaptive title position
             outline_width = 3
 
             # Draw outline for title
@@ -1728,12 +1783,16 @@ class Game:
                 for dy in range(-outline_width, outline_width + 1):
                     if dx != 0 or dy != 0:
                         screen.blit(outline_surface, (title_center[0] + dx - outline_surface.get_width() // 2,
-                                                     title_center[1] + dy - outline_surface.get_height() // 2))
+                                                    title_center[1] + dy - outline_surface.get_height() // 2))
             
             # Draw main title text
             title_surface = self._pixel_font.render(title_text, True, title_color)
             title_rect = title_surface.get_rect(center=title_center)
             screen.blit(title_surface, title_rect)
+        
+        # Calculate adaptive sizes
+        base_size = min(120, SCREEN_WIDTH // 12)  # Adaptive base size
+        selected_size = min(140, SCREEN_WIDTH // 10)  # Adaptive selected size
         
         # Draw level squares
         for i in range(6):
@@ -1755,14 +1814,15 @@ class Game:
             
             # Base size with selection boost
             if i == self._selected_level:
-                base_size = 140  # Selected level is bigger
+                current_size = selected_size  # Selected level is bigger
                 alpha = 255
             else:
-                base_size = 100 + max(0, 40 - distance_from_center // 10)  # Size based on distance
-                alpha = max(180, 255 - distance_from_center // 5)  # Fade based on distance
+                size_reduction = min(20, distance_from_center // (SCREEN_WIDTH // 40))  # Adaptive size reduction
+                current_size = max(base_size - 20, base_size - size_reduction)
+                alpha = max(180, 255 - distance_from_center // max(1, SCREEN_WIDTH // 200))  # Adaptive alpha
             
             # Create rect for this level
-            level_rect = pygame.Rect(x - base_size//2, base_y - base_size//2, base_size, base_size)
+            level_rect = pygame.Rect(x - current_size//2, base_y - current_size//2, current_size, current_size)
             
             # Check if mouse is hovering over this level
             mouse_pos = pygame.mouse.get_pos()
@@ -1789,7 +1849,7 @@ class Game:
             # Draw level image if available
             if i in self._level_images:
                 # Scale image to current size
-                image_size = base_size - 20  # Leave space for border
+                image_size = current_size - 20  # Leave space for border
                 scaled_image = pygame.transform.scale(self._level_images[i], (image_size, image_size))
                 
                 # Apply lock overlay if locked
@@ -1808,7 +1868,8 @@ class Game:
                 screen.blit(scaled_image, image_rect)
             else:
                 # Fallback colored rectangle
-                inner_rect = pygame.Rect(x - (base_size-20)//2, base_y - (base_size-20)//2, base_size-20, base_size-20)
+                inner_size = current_size - 20
+                inner_rect = pygame.Rect(x - inner_size//2, base_y - inner_size//2, inner_size, inner_size)
                 if is_locked:
                     color = (64, 64, 64)  # Gray for locked
                 else:
@@ -1820,55 +1881,50 @@ class Game:
             
             # Draw lock icon if locked
             if is_locked:
-                lock_font = pygame.font.Font(daFont, 18)
+                # Use adaptive font size
+                lock_font_size = max(14, SCREEN_WIDTH // 80)
+                try:
+                    lock_font = pygame.font.Font(os.path.join("assets", "Daydream.ttf"), lock_font_size)
+                except:
+                    lock_font = pygame.font.SysFont(None, lock_font_size)
+                
                 lock_text = "LOCKED"
                 lock_color = (255, 255, 255)
                 outline_color = (0, 0, 0)
                 lock_center = (x, base_y)
                 outline_width = 2
                 
-                try:
-                    # Draw outline for LOCKED text
-                    outline_surface = lock_font.render(lock_text, True, outline_color)
-                    for dx in range(-outline_width, outline_width + 1):
-                        for dy in range(-outline_width, outline_width + 1):
-                            if dx != 0 or dy != 0:
-                                screen.blit(outline_surface, (lock_center[0] + dx - outline_surface.get_width() // 2,
-                                                             lock_center[1] + dy - outline_surface.get_height() // 2))
-                    
-                    # Draw main LOCKED text
-                    lock_surface = lock_font.render(lock_text, True, lock_color)
-                    lock_rect = lock_surface.get_rect(center=lock_center)
-                    screen.blit(lock_surface, lock_rect)
-                except:
-                    # Fallback if emoji doesn't render
-                    fallback_text = "LOCK"
-                    # Draw outline for fallback LOCK text
-                    outline_surface = lock_font.render(fallback_text, True, outline_color)
-                    for dx in range(-outline_width, outline_width + 1):
-                        for dy in range(-outline_width, outline_width + 1):
-                            if dx != 0 or dy != 0:
-                                screen.blit(outline_surface, (lock_center[0] + dx - outline_surface.get_width() // 2,
-                                                             lock_center[1] + dy - outline_surface.get_height() // 2))
-                    
-                    # Draw main fallback LOCK text
-                    lock_surface = lock_font.render(fallback_text, True, lock_color)
-                    lock_rect = lock_surface.get_rect(center=lock_center)
-                    screen.blit(lock_surface, lock_rect)
+                # Draw outline for LOCKED text
+                outline_surface = lock_font.render(lock_text, True, outline_color)
+                for dx in range(-outline_width, outline_width + 1):
+                    for dy in range(-outline_width, outline_width + 1):
+                        if dx != 0 or dy != 0:
+                            screen.blit(outline_surface, (lock_center[0] + dx - outline_surface.get_width() // 2,
+                                                        lock_center[1] + dy - outline_surface.get_height() // 2))
+                
+                # Draw main LOCKED text
+                lock_surface = lock_font.render(lock_text, True, lock_color)
+                lock_rect = lock_surface.get_rect(center=lock_center)
+                screen.blit(lock_surface, lock_rect)
             
-            # Draw level number/text
-            font = pygame.font.Font(daFont, 18)
+            # Draw level number/text with adaptive font
+            text_font_size = max(16, SCREEN_WIDTH // 70)
+            try:
+                font = pygame.font.Font(os.path.join("assets", "Daydream.ttf"), text_font_size)
+            except:
+                font = pygame.font.SysFont(None, text_font_size)
+            
             if i == 5:
                 text = "???" if not self._boss_level_unlocked else "BOSS"
             else:
-                text = "Level "  + str( i + 1)
+                text = "Level " + str(i + 1)
             
             text_color = (255, 255, 255) if alpha > 200 else (alpha, alpha, alpha)
             if is_locked:
                 text_color = (128, 128, 128)
             
-            text_center = (x, base_y + base_size//2 + 25)
-            outline_color = (0, 0, 0) # Black outline for level numbers/text
+            text_center = (x, base_y + current_size//2 + 25)
+            outline_color = (0, 0, 0)  # Black outline for level numbers/text
             outline_width = 2
 
             # Draw outline for level number/text
@@ -1877,22 +1933,22 @@ class Game:
                 for dy in range(-outline_width, outline_width + 1):
                     if dx != 0 or dy != 0:
                         screen.blit(outline_surface, (text_center[0] + dx - outline_surface.get_width() // 2,
-                                                     text_center[1] + dy - outline_surface.get_height() // 2))
+                                                    text_center[1] + dy - outline_surface.get_height() // 2))
             
             # Draw main level number/text
             text_surface = font.render(text, True, text_color)
             text_rect = text_surface.get_rect(center=text_center)
             screen.blit(text_surface, text_rect)
         
-        # Draw selection indicator
+        # Draw selection indicator with adaptive size
         center_x = SCREEN_WIDTH // 2
         # Draw a pulsing circle
         import math
         pulse = abs(math.sin(pygame.time.get_ticks() / 200.0))
-        radius = int(5 + pulse * 3)
-        pygame.draw.circle(screen, (255, 255, 0), (center_x, SCREEN_HEIGHT // 2 + 100), radius)
+        radius = int((3 + pulse * 2) * (SCREEN_WIDTH / 800))  # Scale with screen width
+        pygame.draw.circle(screen, (255, 255, 0), (center_x, SCREEN_HEIGHT // 2 + min(100, SCREEN_HEIGHT // 8)), radius)
         
-        # Draw navigation instructions with better styling
+        # Draw navigation instructions with better styling and adaptive positioning
         if hasattr(self, '_small_font'):
             instructions = [
                 f"Best Time: {self._game_save.display_best_time(self._selected_level)}",
@@ -1900,7 +1956,7 @@ class Game:
                 f"High Score: {self._game_save.display_best_score(self._selected_level)}",
             ]
             
-            y_offset = SCREEN_HEIGHT - 180
+            y_offset = SCREEN_HEIGHT - min(180, SCREEN_HEIGHT // 4)
             instruction_outline_color = (0, 0, 0)
             instruction_text_color = "WHITE"
             outline_width = 1
@@ -1914,7 +1970,7 @@ class Game:
                     for dy in range(-outline_width, outline_width + 1):
                         if dx != 0 or dy != 0:
                             screen.blit(outline_surface, (inst_center[0] + dx - outline_surface.get_width() // 2,
-                                                         inst_center[1] + dy - outline_surface.get_height() // 2))
+                                                        inst_center[1] + dy - outline_surface.get_height() // 2))
                 
                 # Draw main instruction text
                 inst_surface = self._small_font.render(instruction, True, instruction_text_color)
@@ -2183,6 +2239,3 @@ class Game:
             self._screen.fill((0, 0, 0))
             self._draw_loading_icon()
             pygame.display.flip()
-
-if __name__ == "__main__":
-    Game().run()
