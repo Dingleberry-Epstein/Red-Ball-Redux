@@ -1,0 +1,34 @@
+{
+  "levels": {
+    "0": {
+      "best_rank": "S",
+      "best_time": 15.644617319107056,
+      "best_score": 1351,
+      "attempts": 5,
+      "completed": true
+    },
+    "1": {
+      "best_rank": "S",
+      "best_time": 24.60379648208618,
+      "best_score": 1412,
+      "attempts": 2,
+      "completed": true
+    },
+    "2": {
+      "best_rank": "A",
+      "best_time": 34.84095215797424,
+      "best_score": 1526,
+      "attempts": 1,
+      "completed": true
+    },
+    "4": {
+      "best_rank": "S",
+      "best_time": 127.84883141517639,
+      "best_score": 3953,
+      "attempts": 2,
+      "completed": true
+    }
+  },
+  "total_playtime": 437.9019947052002,
+  "version": "1.0"
+}
