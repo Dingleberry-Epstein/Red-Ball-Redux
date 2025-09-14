@@ -1372,122 +1372,6 @@ class Game:
                     placeholder.fill((64 + level_id * 30, 100, 150))  # Different colors per level
                 self._level_images[level_id] = placeholder
 
-    def open_level_select(self):
-        """Opens the level selection menu with a horizontal scrollable grid"""
-        self._level_select_open = True
-        
-        # Hide main menu buttons
-        if hasattr(self, '_main_menu_buttons'):
-            for button in self._main_menu_buttons:
-                button.hide()
-        
-        # Clean up any existing level select UI elements first
-        self._cleanup_level_select_ui()
-        
-        # Load level images if not already loaded
-        if not self._level_images:
-            self.load_level_images()
-        
-        # Initialize scroll and selection
-        self._selected_level = 0
-        
-        # Calculate level positions first
-        self._setup_level_grid()
-        
-        # Calculate proper spacing based on screen width
-        self._level_spacing = SCREEN_WIDTH // 7  # Adaptive spacing based on screen width
-        
-        # Then properly center the first level
-        self._target_scroll = -self._selected_level * self._level_spacing + SCREEN_WIDTH // 2
-        self._scroll_offset = self._target_scroll  # Set initial scroll immediately
-        
-        # Reset mouse interaction state
-        self._mouse_dragging = False
-        self._drag_start_pos = None
-        self._drag_velocity = 0
-        self._drag_history = []
-        
-        # Calculate level positions again with new spacing
-        self._setup_level_grid()
-        
-        # Create navigation buttons with consistent styling
-        button_y = SCREEN_HEIGHT // 2 + 150
-        
-        self._left_arrow = pygame_gui.elements.UIButton(
-            relative_rect=pygame.Rect((50, button_y), (60, 60)),
-            text="<",
-            manager=self._ui_manager,
-            object_id="#nav_button"
-        )
-        
-        self._right_arrow = pygame_gui.elements.UIButton(
-            relative_rect=pygame.Rect((SCREEN_WIDTH - 110, button_y), (60, 60)),
-            text=">",
-            manager=self._ui_manager,
-            object_id="#nav_button"
-        )
-        
-        # Add back button
-        self._back_button = pygame_gui.elements.UIButton(
-            relative_rect=pygame.Rect(
-                (SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT - 80),
-                (200, 50)
-            ),
-            text="BACK",
-            manager=self._ui_manager,
-            object_id="#exit_button"
-        )
-        
-        # Add secret code hint
-        hint_text = "Secret level unlocked!" if self._boss_level_unlocked else "Type the password to unlock the secret level!"
-        self._secret_hint = pygame_gui.elements.UILabel(
-            relative_rect=pygame.Rect(
-                (SCREEN_WIDTH // 2 - 300, SCREEN_HEIGHT - 30),
-                (600, 20)
-            ),
-            text=hint_text,
-            manager=self._ui_manager,
-            object_id="#hint_label"
-        )
-
-    def _cleanup_level_select_ui(self):
-        """Clean up all level select UI elements"""
-        # Clean up navigation and control buttons
-        ui_elements = ['_left_arrow', '_right_arrow', '_select_button', '_back_button', '_secret_hint']
-        for element_name in ui_elements:
-            if hasattr(self, element_name):
-                element = getattr(self, element_name)
-                if element and hasattr(element, 'kill'):
-                    element.kill()
-                    setattr(self, element_name, None)
-        
-        # Clean up any level buttons that might exist from old implementation
-        if hasattr(self, '_level_buttons'):
-            for button in self._level_buttons:
-                if hasattr(button, 'kill'):
-                    button.kill()
-            self._level_buttons = []
-
-    def _setup_level_grid(self):
-        """Setup the positions and rectangles for level squares with adaptive spacing"""
-        self._level_positions = []
-        self._level_rects = []
-        
-        # Grid configuration - make spacing adaptive to screen width
-        base_size = min(120, SCREEN_WIDTH // 12)  # Adaptive base size
-        self._level_spacing = SCREEN_WIDTH // 7  # Adaptive spacing
-        center_y = SCREEN_HEIGHT // 2 - 20
-        
-        # Calculate start position to center the grid properly
-        total_width = (6 - 1) * self._level_spacing  # Total width needed for all levels
-        start_x = SCREEN_WIDTH // 2 - total_width // 2
-        
-        for i in range(6):  # 6 levels total (5 + secret)
-            x = start_x + (i * self._level_spacing)
-            y = center_y
-            
-            self._level_positions.append((x, y))
-            self._level_rects.append(pygame.Rect(x - base_size//2, y - base_size//2, base_size, base_size))
 
     def _get_level_at_mouse_pos(self, mouse_pos):
         """Get which level the mouse is hovering over, accounting for scroll offset"""
@@ -1557,61 +1441,6 @@ class Game:
         
         # Update selected level based on what's closest to center
         self._update_selected_level_from_scroll()
-
-    def _clamp_scroll_bounds(self):
-        """Ensure scroll doesn't go beyond reasonable bounds with adaptive spacing"""
-        # Calculate bounds based on adaptive spacing
-        max_scroll = self._level_spacing  # Allow scrolling a bit past first level
-        min_scroll = -self._level_spacing * 6  # Allow scrolling a bit past last level
-        
-        if self._target_scroll > max_scroll:
-            self._target_scroll = max_scroll
-            self._drag_velocity = 0
-        elif self._target_scroll < min_scroll:
-            self._target_scroll = min_scroll
-            self._drag_velocity = 0
-
-    def _update_selected_level_from_scroll(self):
-        """Update selected level based on current scroll position with adaptive spacing"""
-        # Find which level is closest to screen center
-        center_x = SCREEN_WIDTH // 2
-        closest_level = 0
-        closest_distance = float('inf')
-        
-        for i in range(6):
-            if i >= len(self._level_positions):
-                continue
-                
-            base_x, _ = self._level_positions[i]
-            level_x = base_x + self._scroll_offset
-            distance = abs(level_x - center_x)
-            
-            if distance < closest_distance:
-                closest_distance = distance
-                closest_level = i
-        
-        self._selected_level = closest_level
-
-    def _snap_to_nearest_level(self):
-        """Snap to the nearest level after dragging ends with adaptive spacing"""
-        # Calculate which level should be centered based on current scroll position
-        center_screen_x = SCREEN_WIDTH // 2
-        
-        # Find the level whose position is closest to screen center
-        closest_level = 0
-        min_distance = float('inf')
-        
-        for i in range(6):
-            if i < len(self._level_positions):
-                level_x = self._level_positions[i][0] + self._scroll_offset
-                distance = abs(level_x - center_screen_x)
-                if distance < min_distance:
-                    min_distance = distance
-                    closest_level = i
-        
-        # Snap to that level
-        self._selected_level = closest_level
-        self._target_scroll = -self._selected_level * self._level_spacing + SCREEN_WIDTH // 2
 
     def handle_level_select_input(self, event):
         """Handle input for level select"""
@@ -1720,23 +1549,6 @@ class Game:
         
         return False
 
-    def _move_selection(self, direction):
-        """Move the selection left or right with adaptive spacing"""
-        new_selection = self._selected_level + direction
-        
-        # Clamp to valid range
-        if new_selection < 0:
-            new_selection = 0
-        elif new_selection >= 6:
-            new_selection = 5
-            
-        if new_selection != self._selected_level:
-            self._selected_level = new_selection
-            # Update target scroll to center the selected level with adaptive spacing
-            self._target_scroll = -self._selected_level * self._level_spacing + SCREEN_WIDTH // 2
-            # Stop any existing momentum
-            self._drag_velocity = 0
-
     def _select_current_level(self):
         """Select the currently highlighted level"""
         # Check if secret level is locked
@@ -1763,6 +1575,208 @@ class Game:
         if hasattr(self, '_main_menu_buttons'):
             for button in self._main_menu_buttons:
                 button.show()
+
+    def open_level_select(self):
+        """Opens the level selection menu with a horizontal scrollable grid"""
+        self._level_select_open = True
+        
+        # Hide main menu buttons
+        if hasattr(self, '_main_menu_buttons'):
+            for button in self._main_menu_buttons:
+                button.hide()
+        
+        # Clean up any existing level select UI elements first
+        self._cleanup_level_select_ui()
+        
+        # Load level images if not already loaded
+        if not self._level_images:
+            self.load_level_images()
+        
+        # Calculate adaptive spacing FIRST - this is crucial
+        self._level_spacing = max(150, SCREEN_WIDTH // 6)  # Ensure minimum spacing, scale with width
+        
+        # Initialize scroll and selection
+        self._selected_level = 0
+        
+        # Calculate level positions with new spacing
+        self._setup_level_grid()
+        
+        # Then properly center the first level using the correct spacing
+        self._target_scroll = -self._selected_level * self._level_spacing + SCREEN_WIDTH // 2
+        self._scroll_offset = self._target_scroll  # Set initial scroll immediately
+        
+        # Reset mouse interaction state
+        self._mouse_dragging = False
+        self._drag_start_pos = None
+        self._drag_velocity = 0
+        self._drag_history = []
+        
+        # Create navigation buttons with consistent styling
+        button_y = SCREEN_HEIGHT // 2 + 150
+        
+        self._left_arrow = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect((50, button_y), (60, 60)),
+            text="<",
+            manager=self._ui_manager,
+            object_id="#nav_button"
+        )
+        
+        self._right_arrow = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect((SCREEN_WIDTH - 110, button_y), (60, 60)),
+            text=">",
+            manager=self._ui_manager,
+            object_id="#nav_button"
+        )
+        
+        # Add back button
+        self._back_button = pygame_gui.elements.UIButton(
+            relative_rect=pygame.Rect(
+                (SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT - 80),
+                (200, 50)
+            ),
+            text="BACK",
+            manager=self._ui_manager,
+            object_id="#exit_button"
+        )
+        
+        # Add secret code hint
+        hint_text = "Secret level unlocked!" if self._boss_level_unlocked else "Type the password to unlock the secret level!"
+        self._secret_hint = pygame_gui.elements.UILabel(
+            relative_rect=pygame.Rect(
+                (SCREEN_WIDTH // 2 - 300, SCREEN_HEIGHT - 30),
+                (600, 20)
+            ),
+            text=hint_text,
+            manager=self._ui_manager,
+            object_id="#hint_label"
+        )
+
+    def _cleanup_level_select_ui(self):
+        """Clean up all level select UI elements"""
+        # Clean up navigation and control buttons
+        ui_elements = ['_left_arrow', '_right_arrow', '_select_button', '_back_button', '_secret_hint']
+        for element_name in ui_elements:
+            if hasattr(self, element_name):
+                element = getattr(self, element_name)
+                if element and hasattr(element, 'kill'):
+                    element.kill()
+                    setattr(self, element_name, None)
+        
+        # Clean up any level buttons that might exist from old implementation
+        if hasattr(self, '_level_buttons'):
+            for button in self._level_buttons:
+                if hasattr(button, 'kill'):
+                    button.kill()
+            self._level_buttons = []
+
+    def _setup_level_grid(self):
+        """Setup the positions and rectangles for level squares with adaptive spacing"""
+        self._level_positions = []
+        self._level_rects = []
+        
+        # Grid configuration - use the spacing calculated in open_level_select
+        base_size = min(120, SCREEN_WIDTH // 12)  # Adaptive base size
+        center_y = SCREEN_HEIGHT // 2 - 20
+        
+        # Use a simple linear layout - each level at its index * spacing
+        # This makes the math much simpler and more predictable
+        for i in range(6):  # 6 levels total (5 + secret)
+            x = i * self._level_spacing  # Simple: level 0 at x=0, level 1 at x=spacing, etc.
+            y = center_y
+            
+            self._level_positions.append((x, y))
+            self._level_rects.append(pygame.Rect(x - base_size//2, y - base_size//2, base_size, base_size))
+
+    def _move_selection(self, direction):
+        """Move the selection left or right with adaptive spacing"""
+        new_selection = self._selected_level + direction
+        
+        # Clamp to valid range
+        if new_selection < 0:
+            new_selection = 0
+        elif new_selection >= 6:
+            new_selection = 5
+            
+        if new_selection != self._selected_level:
+            self._selected_level = new_selection
+            # Calculate the scroll needed to center the selected level
+            target_level_pos = self._level_positions[self._selected_level][0]
+            self._target_scroll = SCREEN_WIDTH // 2 - target_level_pos
+            # Stop any existing momentum
+            self._drag_velocity = 0
+
+    def _snap_to_nearest_level(self):
+        """Snap to the nearest level after dragging ends with adaptive spacing"""
+        # Calculate which level position is closest to screen center
+        center_screen_x = SCREEN_WIDTH // 2
+        
+        # Find the level whose actual screen position is closest to center
+        closest_level = 0
+        min_distance = float('inf')
+        
+        for i in range(6):
+            if i < len(self._level_positions):
+                # Calculate where this level currently appears on screen
+                level_screen_x = self._level_positions[i][0] + self._scroll_offset
+                distance = abs(level_screen_x - center_screen_x)
+                
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_level = i
+        
+        # Update selection and snap to that level
+        self._selected_level = closest_level
+        # Calculate the scroll needed to center this level
+        # We want: level_position + scroll_offset = screen_center
+        # So: scroll_offset = screen_center - level_position
+        target_level_pos = self._level_positions[self._selected_level][0]
+        self._target_scroll = SCREEN_WIDTH // 2 - target_level_pos
+
+    def _update_selected_level_from_scroll(self):
+        """Update selected level based on current scroll position with adaptive spacing"""
+        # Find which level is closest to screen center
+        center_x = SCREEN_WIDTH // 2
+        closest_level = 0
+        closest_distance = float('inf')
+        
+        for i in range(6):
+            if i >= len(self._level_positions):
+                continue
+                
+            # Calculate where this level currently appears on screen
+            level_screen_x = self._level_positions[i][0] + self._scroll_offset
+            distance = abs(level_screen_x - center_x)
+            
+            if distance < closest_distance:
+                closest_distance = distance
+                closest_level = i
+        
+        self._selected_level = closest_level
+
+    def _clamp_scroll_bounds(self):
+        """Ensure scroll doesn't go beyond reasonable bounds with adaptive spacing"""
+        if not hasattr(self, '_level_positions') or len(self._level_positions) == 0:
+            return
+        
+        # Calculate bounds based on actual level positions
+        # We want the first level (index 0) to not scroll too far right
+        # and the last level (index 5) to not scroll too far left
+        
+        first_level_pos = self._level_positions[0][0]
+        last_level_pos = self._level_positions[5][0]
+        
+        # Maximum scroll: first level can be at most one spacing to the right of center
+        max_scroll = SCREEN_WIDTH // 2 - first_level_pos + self._level_spacing // 2
+        
+        # Minimum scroll: last level can be at most one spacing to the left of center  
+        min_scroll = SCREEN_WIDTH // 2 - last_level_pos - self._level_spacing // 2
+        
+        if self._target_scroll > max_scroll:
+            self._target_scroll = max_scroll
+            self._drag_velocity = 0
+        elif self._target_scroll < min_scroll:
+            self._target_scroll = min_scroll
+            self._drag_velocity = 0
 
     def draw_level_select(self, screen):
         """Draw the level select grid with adaptive sizing"""
