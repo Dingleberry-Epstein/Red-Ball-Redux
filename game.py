@@ -49,15 +49,6 @@ class Game:
         
         self._game_save = GameSave()  # Initialize game save system
 
-                # Add save deletion variables
-        self._delete_key_held = False
-        self._delete_hold_timer = 0
-        self._delete_hold_duration = 4.0  # 4 seconds to delete
-        self._delete_progress = 0
-        self._save_deleted = False
-        self._delete_message_timer = 0
-        self._delete_message_duration = 3.0  # Show "Save file wiped!" for 3 seconds
-
         self._setup_autosave_warning()
 
         self._player_has_map = False
@@ -890,7 +881,8 @@ class Game:
                 if event.type == pygame.KEYDOWN:
                     self._handle_keydown_events(event)
                 elif event.type == pygame.KEYUP:
-                    self._handle_keyup_events(event)
+                    if event.key == pygame.K_m:
+                        self._map_key_pressed = False
 
                 # Pass events to map system
                 if self._state == "game" and (self._map_system.is_open or self._map_system.fading_in or self._map_system.fading_out):
@@ -909,117 +901,6 @@ class Game:
 
             pygame.display.flip()
 
-    def _update_delete_progress(self, dt):
-        """Update save deletion progress"""
-        if self._state != "main_menu" or self._level_select_open:
-            return
-        
-        if self._delete_key_held and not self._save_deleted:
-            self._delete_hold_timer += dt
-            self._delete_progress = min(self._delete_hold_timer / self._delete_hold_duration, 1.0)
-            
-            # If timer reaches duration, delete the save
-            if self._delete_hold_timer >= self._delete_hold_duration and not self._save_deleted:
-                if self._game_save.wipe_save_data():
-                    self._save_deleted = True
-                    self._delete_message_timer = 0
-                    print("Save file successfully deleted!")
-                else:
-                    print("Failed to delete save file!")
-                    self._delete_key_held = False
-                    self._delete_hold_timer = 0
-                    self._delete_progress = 0
-        
-        # Handle the "Save file wiped!" message timer
-        if self._save_deleted:
-            self._delete_message_timer += dt
-            if self._delete_message_timer >= self._delete_message_duration:
-                self._save_deleted = False
-                self._delete_message_timer = 0
-                self._delete_key_held = False
-                self._delete_hold_timer = 0
-                self._delete_progress = 0
-
-    # Add a new method to draw the delete UI:
-
-    def _draw_delete_ui(self):
-        """Draw the save deletion UI in bottom right corner"""
-        if self._state != "main_menu" or self._level_select_open:
-            return
-        
-        # Position in bottom right corner
-        padding = 20
-        bottom_right_x = SCREEN_WIDTH - padding
-        bottom_right_y = SCREEN_HEIGHT - padding
-        
-        # Draw instruction text
-        if not self._save_deleted:
-            instruction_text = "Hold 'DEL' to delete save file"
-            instruction_surface = self._small_font.render(instruction_text, True, (200, 200, 200))
-            
-            # Position text
-            text_x = bottom_right_x - instruction_surface.get_width()
-            text_y = bottom_right_y - instruction_surface.get_height()
-            
-            # Draw text with subtle outline
-            for offset in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
-                outline_surface = self._small_font.render(instruction_text, True, (50, 50, 50))
-                self._screen.blit(outline_surface, (text_x + offset[0], text_y + offset[1]))
-            
-            self._screen.blit(instruction_surface, (text_x, text_y))
-            
-            # Draw progress bar if delete key is held
-            if self._delete_key_held and self._delete_progress > 0:
-                # Progress bar dimensions
-                bar_width = 200
-                bar_height = 20
-                bar_x = bottom_right_x - bar_width
-                bar_y = text_y - bar_height - 10
-                
-                # Draw progress bar background
-                bar_bg_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
-                pygame.draw.rect(self._screen, (50, 50, 50), bar_bg_rect)
-                pygame.draw.rect(self._screen, (100, 100, 100), bar_bg_rect, 2)
-                
-                # Draw progress fill
-                fill_width = int(bar_width * self._delete_progress)
-                if fill_width > 0:
-                    fill_rect = pygame.Rect(bar_x, bar_y, fill_width, bar_height)
-                    # Color changes from yellow to red as it fills
-                    red_component = int(255 * self._delete_progress)
-                    green_component = int(255 * (1 - self._delete_progress))
-                    fill_color = (red_component, green_component, 0)
-                    pygame.draw.rect(self._screen, fill_color, fill_rect)
-                
-                # Draw "deleting..." text above progress bar
-                deleting_text = "deleting..."
-                deleting_surface = self._small_font.render(deleting_text, True, (255, 255, 255))
-                deleting_x = bar_x + (bar_width // 2) - (deleting_surface.get_width() // 2)
-                deleting_y = bar_y - deleting_surface.get_height() - 5
-                
-                # Draw deleting text with outline
-                for offset in [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]:
-                    outline_surface = self._small_font.render(deleting_text, True, (0, 0, 0))
-                    self._screen.blit(outline_surface, (deleting_x + offset[0], deleting_y + offset[1]))
-                
-                self._screen.blit(deleting_surface, (deleting_x, deleting_y))
-        
-        else:
-            # Draw "Save file wiped!" message
-            wiped_text = "Save file wiped!"
-            wiped_surface = self._menu_font.render(wiped_text, True, (255, 100, 100))  # Red color
-            
-            # Position text
-            text_x = bottom_right_x - wiped_surface.get_width()
-            text_y = bottom_right_y - wiped_surface.get_height()
-            
-            # Draw text with outline for emphasis
-            for offset in [(-2, -2), (-2, 0), (-2, 2), (0, -2), (0, 2), (2, -2), (2, 0), (2, 2)]:
-                outline_surface = self._menu_font.render(wiped_text, True, (0, 0, 0))
-                self._screen.blit(outline_surface, (text_x + offset[0], text_y + offset[1]))
-            
-            self._screen.blit(wiped_surface, (text_x, text_y))
-
     def _handle_keydown_events(self, event):
         """Handle keyboard down events"""
         if event.key == pygame.K_m:
@@ -1029,25 +910,10 @@ class Game:
                 self._map_key_pressed = True
             elif not self._map_key_pressed and self._state == "game" and not self._player_has_map:
                 self._map_system.show_message = True
-        elif event.key == pygame.K_DELETE and self._state == "main_menu" and not self._level_select_open:
-            # Start delete process when DEL is pressed in main menu
-            self._delete_key_held = True
-            self._delete_hold_timer = 0
-            self._delete_progress = 0
         elif event.key == pygame.K_ESCAPE:
             self._handle_escape_key()
         elif event.key == pygame.K_r and self._state == "game" and not self._map_system.is_open:
             self._level.reset_ball()
-
-    def _handle_keyup_events(self, event):
-        """Handle keyboard up events"""
-        if event.key == pygame.K_m:
-            self._map_key_pressed = False
-        elif event.key == pygame.K_DELETE:
-            # Cancel delete process when DEL is released
-            self._delete_key_held = False
-            self._delete_hold_timer = 0
-            self._delete_progress = 0
 
     def _handle_escape_key(self):
         """Handle behavior when escape key is pressed with loading screen"""
@@ -1105,9 +971,6 @@ class Game:
             # Update UI manager
             self._ui_manager.update(dt)
             self.update_background()
-            
-            # Update delete progress
-            self._update_delete_progress(dt)
             
             # Setup main menu buttons if not already set up
             if not hasattr(self, '_main_menu_buttons') or not self._main_menu_buttons:
@@ -2110,9 +1973,6 @@ class Game:
                 boss_text_surface = self._small_font.render(boss_unlocked_text, True, (255, 215, 0))  # Gold color
                 boss_text_rect = boss_text_surface.get_rect(topleft=(10, 10))
                 self._screen.blit(boss_text_surface, boss_text_rect)
-            
-            # Draw delete save UI
-            self._draw_delete_ui()
         
         # Draw UI elements (buttons will be shown/hidden based on state)
         self._ui_manager.draw_ui(self._screen)
